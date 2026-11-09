@@ -538,6 +538,20 @@ export function createController(workspace, ui) {
                 requestSelection(entry);
             }
         },
+        closeTab(id) {
+            const group = focusedEntry()?.group;
+            const entry = windows.get(id);
+            if (stopped || !group || entry?.group !== group || !group.bar.interactive || ui.blocked()) {
+                return;
+            }
+            if (entry !== group.active) {
+                requestSelection(entry);
+            }
+            const window = entry.window;
+            if (entry.group === group && entry === group.active && window?.closeable && !window.deleted) {
+                window.closeWindow();
+            }
+        },
         reorder(id, targetId, after) {
             const group = focusedEntry()?.group;
             const entry = windows.get(id);

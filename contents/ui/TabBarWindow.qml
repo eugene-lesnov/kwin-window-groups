@@ -19,6 +19,7 @@ Window {
     readonly property int activeIndex: view ? view.activeIndex : -1
 
     signal selected(string id)
+    signal closeRequested(string id)
     signal reordered(string id, string targetId, bool after)
     signal detached(string id)
     signal ungrouped()
@@ -142,6 +143,7 @@ Window {
                 Accessible.onPressAction: bar.selected(modelData.id)
 
                 RowLayout {
+                    z: 1
                     anchors.fill: parent
                     anchors.leftMargin: Kirigami.Units.smallSpacing * 2
                     anchors.rightMargin: Kirigami.Units.smallSpacing * 2
@@ -158,6 +160,33 @@ Window {
                         text: tab.modelData.caption
                         color: tab.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         elide: Text.ElideRight
+                    }
+
+                    Desktop.ToolButton {
+                        id: closeButton
+
+                        Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                        Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                        enabled: bar.interactive
+                        focusPolicy: Qt.NoFocus
+                        icon.name: "window-close"
+                        icon.width: Kirigami.Units.iconSizes.small
+                        icon.height: Kirigami.Units.iconSizes.small
+                        icon.color: tab.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                        Accessible.name: i18n("Close Window")
+
+                        Rectangle {
+                            anchors.fill: closeButton
+                            visible: tab.selected && closeButton.enabled && closeButton.hovered
+                            color: "transparent"
+                            radius: Kirigami.Units.cornerRadius
+                            border.color: closeButton.icon.color
+                        }
+
+                        onClicked: {
+                            tabMenu.close();
+                            Qt.callLater(bar.closeRequested, tab.modelData.id);
+                        }
                     }
                 }
 

@@ -24,6 +24,7 @@ Item {
         }) as TabBarWindow;
         if (bar) {
             bar.selected.connect(id => controller.select(id));
+            bar.closeRequested.connect(id => controller.closeTab(id));
             bar.reordered.connect((id, targetId, after) => controller.reorder(id, targetId, after));
             bar.detached.connect(id => controller.detach(id));
             bar.ungrouped.connect(() => controller.ungroup());
@@ -90,8 +91,9 @@ Item {
         if (!hint) {
             throw new Error("Window Tabs could not create its drop hint");
         }
+        const maximizeArea = KWin.MaximizeArea ?? 2;
         controller = Groups.createController(workspace, {
-            workArea: window => workspace.clientArea(KWin.MaximizeArea ?? 2, window.output, workspace.currentDesktop),
+            workArea: window => workspace.clientArea(maximizeArea, window.output, workspace.currentDesktop),
             stripHeight: () => root.stripHeight,
             isOverlay: window => window.caption === "org.kde.kwin-window-tabs.bar" || window.caption === "org.kde.kwin-window-tabs.menu"
                 || window.caption === hint.title,
