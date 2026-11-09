@@ -17,6 +17,7 @@
 #include <workspace.h>
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QPalette>
 #include <QSocketNotifier>
 #include <QTimer>
@@ -231,8 +232,12 @@ private:
         xdg_toplevel_set_app_id(m_toplevel, appId.constData());
         xdg_toplevel_set_title(m_toplevel, m_title.toUtf8().constData());
         if (m_iconManager) {
+            constexpr auto tabIconName = "tab-duplicate";
+            const char *iconName = QIcon::hasThemeIcon(QString::fromLatin1(tabIconName))
+                ? tabIconName
+                : "preferences-system-windows";
             auto *icon = xdg_toplevel_icon_manager_v1_create_icon(m_iconManager);
-            xdg_toplevel_icon_v1_set_name(icon, "preferences-system-windows");
+            xdg_toplevel_icon_v1_set_name(icon, iconName);
             xdg_toplevel_icon_manager_v1_set_icon(m_iconManager, m_toplevel, icon);
             xdg_toplevel_icon_v1_destroy(icon);
         }
