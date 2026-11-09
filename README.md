@@ -1,19 +1,27 @@
 # Window Groups
 
-Window Groups is a KWin script for KDE Plasma 6 on Wayland. It lets you group windows from different applications in a shared frame and switch between them using a tab bar.
+Keep your editor and terminal in one frame, with a tab for each window. The group moves and resizes as one window and gets one entry in the taskbar. Window Groups is an experimental KWin script for KDE Plasma 6 on Wayland.
 
-## Using Window Groups
+## Using it
 
-Hold **Meta** and drag a window with the left mouse button toward the top edge of another window. Release over the highlighted drop zone to group them. You can drag more windows into an existing group.
+Hold **Meta** and drag a window with the left mouse button toward the top edge of another window. Let go over the highlighted zone. The same gesture adds a window to an existing group. To group by keyboard, press **Meta+G** in one window, focus the other, and press it again.
 
-Click a tab or press **Meta+Page Up** or **Meta+Page Down** to switch windows. Right-click a tab to detach its window or disband the group.
+- Click a tab to switch windows.
+- Drag tabs along the bar to reorder them. To detach one, pull it away from the bar and let go when the preview appears. **Meta+Shift+G** detaches the active tab.
+- Click a tab's **×** to close its window. The right-click menu lets you detach a tab or ungroup all the windows.
 
-## How it works
+## Build and install
 
-The script uses KWin's standard window move gesture. QML and JavaScript handle the tab bar, drop indicator, and group state. A native C++ module detects the drag and release, positions the active window inside the group frame, and hides inactive windows until selected.
+The native module uses KWin internals and needs **KWin 6.7.6** with matching development files. You'll also need Qt 6.10+, CMake 3.21+, a C++23 compiler, pkg-config, KF6 I18n and Service, and the Wayland client headers, scanner, and protocols.
 
-## Compatibility
+Run this from the repository root.
 
-The project targets Plasma 6 Wayland. The current build requires **KWin 6.7.6** and **Qt 6.10 or later**. The native module uses KWin internals, so using a different KWin version requires checking API compatibility and rebuilding against matching headers.
+```sh
+build_dir=$(mktemp -d) &&
+    cmake -S . -B "$build_dir" &&
+    cmake --build "$build_dir" &&
+    cmake --install "$build_dir" --prefix "$PWD" &&
+    kpackagetool6 --type KWin/Script --install "$PWD"
+```
 
-**Experimental. Use at your own risk.**
+Enable **Window Groups** in **System Settings → Window Management → KWin Scripts**. If Window Groups is already installed, use `--upgrade` in the last command.
