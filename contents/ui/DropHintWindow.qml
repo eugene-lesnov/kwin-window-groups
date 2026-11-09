@@ -34,7 +34,7 @@ Window {
             hintWidth, hintHeight);
     }
 
-    title: "org.kde.kwin-window-tabs.drop-hint"
+    title: "org.kde.kwin-window-groups.drop-hint"
     flags: Qt.X11BypassWindowManagerHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
     visible: view !== null && !suppressed
     color: "transparent"

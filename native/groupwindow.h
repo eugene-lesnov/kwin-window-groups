@@ -20,7 +20,7 @@ class InternalWindow;
 class Window;
 }
 
-namespace KWIN_WINDOW_TABS_NAMESPACE
+namespace KWIN_WINDOW_GROUPS_NAMESPACE
 {
 
 class GroupWindow : public QObject

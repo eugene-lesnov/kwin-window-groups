@@ -1,8 +1,8 @@
-# Window Tabs
+# Window Groups
 
-Window Tabs is a KWin script for KDE Plasma 6 on Wayland. It lets you group windows from different applications in a shared frame and switch between them using a tab bar.
+Window Groups is a KWin script for KDE Plasma 6 on Wayland. It lets you group windows from different applications in a shared frame and switch between them using a tab bar.
 
-## Using Window Tabs
+## Using Window Groups
 
 Hold **Meta** and drag a window with the left mouse button toward the top edge of another window. Release over the highlighted drop zone to group them. You can drag more windows into an existing group.
 

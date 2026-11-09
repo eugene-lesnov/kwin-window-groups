@@ -20,7 +20,7 @@ Window {
     property var insertion: null
     property var detachHint: null
     property string pressedTabId: ""
-    readonly property string menuTitle: "org.kde.kwin-window-tabs.menu"
+    readonly property string menuTitle: "org.kde.kwin-window-groups.menu"
     readonly property int activeIndex: view ? view.activeIndex : -1
 
     signal selected(string id)
@@ -30,7 +30,7 @@ Window {
     signal droppedOutside(string id, point position)
     signal ungrouped()
 
-    title: "org.kde.kwin-window-tabs.bar"
+    title: "org.kde.kwin-window-groups.bar"
     flags: Qt.X11BypassWindowManagerHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     visible: view !== null
     color: "transparent"

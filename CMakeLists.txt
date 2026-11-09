@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(KWinWindowTabsInput LANGUAGES C CXX)
+project(KWinWindowGroupsInput LANGUAGES C CXX)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_CXX_STANDARD 23)
@@ -16,31 +16,31 @@ find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 qt_policy(SET QTP0001 NEW)
 
-set(input_module_uri org.kde.kwinwindowtabs.input)
-set(input_namespace KWinWindowTabs)
-if(DEFINED KWIN_WINDOW_TABS_BUILD_ID)
-    if(NOT "${KWIN_WINDOW_TABS_BUILD_ID}" MATCHES "^[0-9a-f]+$")
-        message(FATAL_ERROR "KWIN_WINDOW_TABS_BUILD_ID must be a hexadecimal identifier")
+set(input_module_uri org.kde.kwinwindowgroups.input)
+set(input_namespace KWinWindowGroups)
+if(DEFINED KWIN_WINDOW_GROUPS_BUILD_ID)
+    if(NOT "${KWIN_WINDOW_GROUPS_BUILD_ID}" MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "KWIN_WINDOW_GROUPS_BUILD_ID must be a hexadecimal identifier")
     endif()
-    string(APPEND input_module_uri ".rev_${KWIN_WINDOW_TABS_BUILD_ID}")
-    string(APPEND input_namespace "_${KWIN_WINDOW_TABS_BUILD_ID}")
+    string(APPEND input_module_uri ".rev_${KWIN_WINDOW_GROUPS_BUILD_ID}")
+    string(APPEND input_namespace "_${KWIN_WINDOW_GROUPS_BUILD_ID}")
 endif()
 string(REPLACE "." "/" input_module_path "${input_module_uri}")
 set(input_module_dir "${CMAKE_CURRENT_BINARY_DIR}/${input_module_path}")
-qt_add_qml_module(kwinwindowtabsinput
+qt_add_qml_module(kwinwindowgroupsinput
     URI "${input_module_uri}"
     VERSION 1.0
-    PLUGIN_TARGET kwinwindowtabsinput
+    PLUGIN_TARGET kwinwindowgroupsinput
     OUTPUT_DIRECTORY "${input_module_dir}"
     SOURCES native/moveinput.h native/moveinput.cpp native/groupwindow.h native/groupwindow.cpp
 )
-target_include_directories(kwinwindowtabsinput PRIVATE native "${CMAKE_CURRENT_BINARY_DIR}")
-target_compile_definitions(kwinwindowtabsinput PRIVATE "KWIN_WINDOW_TABS_NAMESPACE=${input_namespace}")
-target_link_libraries(kwinwindowtabsinput PRIVATE KWin::kwin KF6::I18n KF6::Service Qt6::Qml Wayland::Client)
-if(DEFINED KWIN_WINDOW_TABS_BUILD_ID)
-    target_compile_definitions(kwinwindowtabsinput PRIVATE "KWIN_WINDOW_TABS_BUILD_ID=\"${KWIN_WINDOW_TABS_BUILD_ID}\"")
-    target_link_libraries(kwinwindowtabsinput PRIVATE Qt6::DBus)
-    set_target_properties(kwinwindowtabsinput PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+target_include_directories(kwinwindowgroupsinput PRIVATE native "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_definitions(kwinwindowgroupsinput PRIVATE "KWIN_WINDOW_GROUPS_NAMESPACE=${input_namespace}")
+target_link_libraries(kwinwindowgroupsinput PRIVATE KWin::kwin KF6::I18n KF6::Service Qt6::Qml Wayland::Client)
+if(DEFINED KWIN_WINDOW_GROUPS_BUILD_ID)
+    target_compile_definitions(kwinwindowgroupsinput PRIVATE "KWIN_WINDOW_GROUPS_BUILD_ID=\"${KWIN_WINDOW_GROUPS_BUILD_ID}\"")
+    target_link_libraries(kwinwindowgroupsinput PRIVATE Qt6::DBus)
+    set_target_properties(kwinwindowgroupsinput PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 endif()
 
 function(add_wayland_protocol name protocol_dir qt_dir)
@@ -55,7 +55,7 @@ function(add_wayland_protocol name protocol_dir qt_dir)
         COMMAND "${WAYLAND_SCANNER}" private-code "${${name}_xml}" "${code}"
         DEPENDS "${${name}_xml}"
         VERBATIM)
-    target_sources(kwinwindowtabsinput PRIVATE "${header}" "${code}")
+    target_sources(kwinwindowgroupsinput PRIVATE "${header}" "${code}")
 endfunction()
 
 add_wayland_protocol(xdg-shell stable/xdg-shell xdg-shell)
@@ -63,8 +63,8 @@ add_wayland_protocol(xdg-decoration-unstable-v1 unstable/xdg-decoration xdg-deco
 add_wayland_protocol(viewporter stable/viewporter viewporter)
 add_wayland_protocol(xdg-toplevel-icon-v1 staging/xdg-toplevel-icon xdg-toplevel-icon)
 
-install(TARGETS kwinwindowtabsinput LIBRARY DESTINATION contents/ui/native-input)
-install(FILES "${input_module_dir}/qmldir" "${input_module_dir}/kwinwindowtabsinput.qmltypes"
+install(TARGETS kwinwindowgroupsinput LIBRARY DESTINATION contents/ui/native-input)
+install(FILES "${input_module_dir}/qmldir" "${input_module_dir}/kwinwindowgroupsinput.qmltypes"
     DESTINATION contents/ui/native-input)
 
 set(KDE_INSTALL_LOCALEDIR contents/locale)

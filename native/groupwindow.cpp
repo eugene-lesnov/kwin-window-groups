@@ -28,7 +28,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-namespace KWIN_WINDOW_TABS_NAMESPACE
+namespace KWIN_WINDOW_GROUPS_NAMESPACE
 {
 
 class GroupWindow::Surface
@@ -181,7 +181,7 @@ private:
         if (!m_compositor || !m_shm || !m_shell || !m_decorationManager || !m_viewporter) {
             return false;
         }
-        const int fd = memfd_create("kwin-window-tabs-window", MFD_CLOEXEC);
+        const int fd = memfd_create("kwin-window-groups-window", MFD_CLOEXEC);
         if (fd < 0) {
             return false;
         }
@@ -227,7 +227,7 @@ private:
         }();
         xdg_toplevel_add_listener(m_toplevel, &toplevelListener, this);
 
-        const auto appId = "org.kde.kwinwindowtabs." + QUuid::createUuid().toByteArray(QUuid::WithoutBraces);
+        const auto appId = "org.kde.kwinwindowgroups." + QUuid::createUuid().toByteArray(QUuid::WithoutBraces);
         xdg_toplevel_set_app_id(m_toplevel, appId.constData());
         xdg_toplevel_set_title(m_toplevel, m_title.toUtf8().constData());
         if (m_iconManager) {

@@ -1,11 +1,11 @@
 {
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
-        "Id": "kwin-window-tabs",
-        "Name": "Window Tabs",
-        "Name[ru]": "Вкладки окон",
-        "Description": "Group application windows into tabs",
-        "Description[ru]": "Группировка окон приложений во вкладки",
+        "Id": "kwin-window-groups",
+        "Name": "Window Groups",
+        "Name[ru]": "Группы окон",
+        "Description": "Group application windows in a shared frame with tabs",
+        "Description[ru]": "Объединяет окна приложений в одну рамку с вкладками",
         "Icon": "preferences-system-windows",
         "Version": "0.1.1",
         "EnabledByDefault": false

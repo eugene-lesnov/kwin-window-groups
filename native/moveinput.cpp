@@ -15,11 +15,11 @@
 #include <QPointer>
 #include <QTimer>
 
-#ifdef KWIN_WINDOW_TABS_BUILD_ID
+#ifdef KWIN_WINDOW_GROUPS_BUILD_ID
 #include <QDBusConnection>
 #endif
 
-namespace KWIN_WINDOW_TABS_NAMESPACE
+namespace KWIN_WINDOW_GROUPS_NAMESPACE
 {
 
 class MoveInput::Spy final : public KWin::InputEventSpy
@@ -95,7 +95,7 @@ MoveInput::MoveInput(QObject *parent)
 
 MoveInput::~MoveInput() = default;
 
-#ifdef KWIN_WINDOW_TABS_BUILD_ID
+#ifdef KWIN_WINDOW_GROUPS_BUILD_ID
 bool MoveInput::registerReloadStatus(const QUrl &entry)
 {
     const QString entryPath = entry.toLocalFile();
@@ -103,7 +103,7 @@ bool MoveInput::registerReloadStatus(const QUrl &entry)
         return false;
     }
     if (!QDBusConnection::sessionBus().registerObject(
-            QStringLiteral("/Scripting/WindowTabsReload"), QStringLiteral("org.kde.kwin.WindowTabs.Reload"),
+            QStringLiteral("/Scripting/WindowGroupsReload"), QStringLiteral("org.kde.kwin.WindowGroups.Reload"),
             this, QDBusConnection::ExportScriptableSlots)) {
         return false;
     }
@@ -113,13 +113,13 @@ bool MoveInput::registerReloadStatus(const QUrl &entry)
 
 QString MoveInput::reloadStatus() const
 {
-    return QStringLiteral(KWIN_WINDOW_TABS_BUILD_ID) + u'\n' + m_reloadEntry;
+    return QStringLiteral(KWIN_WINDOW_GROUPS_BUILD_ID) + u'\n' + m_reloadEntry;
 }
 #endif
 
 QString MoveInput::registerTranslationCatalog(const QUrl &localeDirectory) const
 {
-    constexpr auto domain = "kwin-window-tabs";
+    constexpr auto domain = "kwin-window-groups";
     const QString path = QFileInfo(localeDirectory.toLocalFile()).canonicalFilePath();
     if (!path.isEmpty()) {
         KLocalizedString::addDomainLocaleDir(domain, path);
