@@ -8,6 +8,7 @@
 #include <config-kwin.h>
 #include <internalwindow.h>
 #include <scene/windowitem.h>
+#include <virtualdesktops.h>
 #include <wayland/clientconnection.h>
 #include <wayland/plasmawindowmanagement.h>
 #include <wayland/surface.h>
@@ -845,6 +846,62 @@ bool GroupWindow::detachTab(QObject *object)
     }
     tab->setHidden(false);
     return tab == m_anchor && restoreAnchorMaximization();
+}
+
+bool GroupWindow::detachTabAt(QObject *object, const QPointF &position, const QSizeF &size)
+{
+    auto *tab = qobject_cast<KWin::Window *>(object);
+    if (m_disposed || m_failed || !m_window || !m_window->isShown() || !m_window->isOnCurrentDesktop()
+        || !m_window->isOnCurrentActivity() || m_window->isInteractiveMove() || m_window->isInteractiveResize()
+        || KWin::waylandServer()->isScreenLocked()) {
+        return false;
+    }
+    if (!m_tabs.contains(tab) || tab->isDeleted() || !tab->isMovable() || !tab->isResizable()
+        || !tab->moveResizeOutput() || tab->isRequestedFullScreen() || tab->requestedTile()
+        || tab->requestedMaximizeMode() != KWin::MaximizeRestore || tab->isInteractiveMove() || tab->isInteractiveResize()) {
+        return false;
+    }
+
+    auto *workspace = KWin::workspace();
+    auto *groupOutput = m_window->output();
+    auto *output = workspace->outputAt(position);
+    if (!output) {
+        return false;
+    }
+
+    QSizeF restoreSize = size;
+    if (tab == m_anchor) {
+        if (m_anchorRestoreFrame.isValid()) {
+            restoreSize = m_anchorRestoreFrame.size();
+        }
+        m_anchor.clear();
+    }
+    KWin::StackingUpdatesBlocker blocker(workspace);
+    detachTab(tab);
+
+    if (output != tab->moveResizeOutput() && tab->isMovableAcrossScreens()) {
+        tab->sendToOutput(output);
+    }
+    const auto area = workspace->clientArea(KWin::MaximizeArea, tab, tab->moveResizeOutput());
+    const auto frameSize = tab->constrainFrameSize(restoreSize.boundedTo(area.size()));
+    const auto topLeft = position - QPointF(frameSize.width() / 2, m_stripHeight / 2.0);
+    const auto frame = tab->keepInArea(KWin::RectF(topLeft, frameSize), area);
+    tab->move(frame.topLeft());
+    tab->resize(frame.size());
+    if (tab->moveResizeOutput() != groupOutput) {
+        auto *desktopManager = KWin::VirtualDesktopManager::self();
+        auto *desktop = desktopManager->currentDesktop(tab->moveResizeOutput());
+        if (!tab->isOnDesktop(desktop)) {
+            auto desktops = tab->desktops();
+            desktops.removeOne(desktopManager->currentDesktop(groupOutput));
+            desktops.append(desktop);
+            tab->setDesktops(desktops);
+        }
+    }
+    if (tab->isOnCurrentDesktop() && tab->isOnCurrentActivity()) {
+        workspace->activateWindow(tab, true);
+    }
+    return true;
 }
 
 void GroupWindow::updateMinimumSize()

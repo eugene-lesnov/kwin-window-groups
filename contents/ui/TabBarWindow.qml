@@ -11,11 +11,15 @@ Window {
     id: bar
 
     required property var readCursorPosition
+    required property var workAreaAt
     required property int stripHeight
     required property string translationDomain
     property var view: null
+    property var tabs: []
     property bool interactive: false
     property var insertion: null
+    property var detachHint: null
+    property string pressedTabId: ""
     readonly property string menuTitle: "org.kde.kwin-window-tabs.menu"
     readonly property int activeIndex: view ? view.activeIndex : -1
 
@@ -23,6 +27,7 @@ Window {
     signal closeRequested(string id)
     signal reordered(string id, string targetId, bool after)
     signal detached(string id)
+    signal droppedOutside(string id, point position)
     signal ungrouped()
 
     title: "org.kde.kwin-window-tabs.bar"
@@ -60,14 +65,36 @@ Window {
         }
 
         return {
-            targetId: view.tabs[targetIndex].id,
+            targetId: tabs[targetIndex].id,
             after,
             x: target.x - tabList.contentX + (rightHalf ? target.width : 0)
         };
     }
 
+    function outsideStrip(point, threshold) {
+        const margin = Math.max(threshold, 2 * Kirigami.Units.largeSpacing);
+        return point.x < -margin || point.x >= tabList.width + margin
+            || point.y < -margin || point.y >= tabList.height + margin;
+    }
+
+    function detachHintAt(position, tabId) {
+        return {
+            detaching: true,
+            position,
+            area: workAreaAt(position),
+            stripHeight,
+            window: view.windowForTab(tabId)
+        };
+    }
+
+    function cancelTabDrag() {
+        pressedTabId = "";
+        insertion = null;
+        detachHint = null;
+    }
+
     function openTabMenu(tabId, position) {
-        if (!visible || !interactive || !view?.tabs.some(tab => tab.id === tabId)) {
+        if (!visible || !interactive || !tabs.some(tab => tab.id === tabId)) {
             return;
         }
 
@@ -87,15 +114,20 @@ Window {
     }
 
     onActiveIndexChanged: Qt.callLater(revealActiveTab)
-    onVisibleChanged: if (!visible) tabMenu.close()
-    onInteractiveChanged: {
-        if (!interactive) {
-            insertion = null;
+    onVisibleChanged: {
+        if (!visible) {
+            cancelTabDrag();
             tabMenu.close();
         }
     }
-    onViewChanged: {
-        if (tabMenu.visible && !view?.tabs.some(tab => tab.id === tabMenu.tabId)) {
+    onInteractiveChanged: {
+        if (!interactive) {
+            cancelTabDrag();
+            tabMenu.close();
+        }
+    }
+    onTabsChanged: {
+        if (tabMenu.visible && !tabs.some(tab => tab.id === tabMenu.tabId)) {
             tabMenu.close();
         }
     }
@@ -116,9 +148,9 @@ Window {
             clip: true
             orientation: ListView.Horizontal
             boundsBehavior: Flickable.StopAtBounds
-            model: bar.view ? bar.view.tabs : []
+            model: bar.tabs
             onCountChanged: Qt.callLater(bar.revealActiveTab)
-            onModelChanged: bar.insertion = null
+            onModelChanged: bar.cancelTabDrag()
             onContentXChanged: bar.insertion = null
 
             Controls.ScrollBar.horizontal: Controls.ScrollBar {
@@ -202,6 +234,7 @@ Window {
                     property bool dragging: false
 
                     anchors.fill: parent
+                    enabled: bar.interactive
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     preventStealing: true
 
@@ -209,11 +242,12 @@ Window {
                         if (event.button === Qt.LeftButton) {
                             pressPosition = mapToItem(tabList, event.x, event.y);
                             dragging = false;
+                            bar.pressedTabId = tab.modelData.id;
                         }
                     }
 
                     onPositionChanged: event => {
-                        if (!(pressedButtons & Qt.LeftButton) || !bar.interactive) {
+                        if (!(pressedButtons & Qt.LeftButton) || bar.pressedTabId !== tab.modelData.id) {
                             return;
                         }
                         const point = mapToItem(tabList, event.x, event.y);
@@ -221,28 +255,40 @@ Window {
                             return;
                         }
                         dragging = true;
-                        bar.insertion = bar.insertionAt(tab, point);
+                        const outside = bar.outsideStrip(point, drag.threshold);
+                        bar.insertion = outside ? null : bar.insertionAt(tab, point);
+                        bar.detachHint = outside
+                            ? bar.detachHintAt(tabList.mapToGlobal(point.x, point.y), tab.modelData.id) : null;
                     }
 
                     onReleased: event => {
-                        if (event.button === Qt.LeftButton && dragging) {
-                            const drop = bar.insertionAt(tab, mapToItem(tabList, event.x, event.y));
-                            bar.insertion = null;
+                        const id = tab.modelData.id;
+                        if (event.button !== Qt.LeftButton || bar.pressedTabId !== id) {
+                            return;
+                        }
+                        bar.cancelTabDrag();
+                        const point = mapToItem(tabList, event.x, event.y);
+                        if (!dragging) {
+                            if (contains(Qt.point(event.x, event.y)) && tabList.contains(point)) {
+                                tabMenu.close();
+                                bar.selected(id);
+                            }
+                        } else if (bar.outsideStrip(point, drag.threshold)) {
+                            Qt.callLater(bar.droppedOutside, id, tabList.mapToGlobal(point.x, point.y));
+                        } else {
+                            const drop = bar.insertionAt(tab, point);
                             if (drop) {
-                                Qt.callLater(bar.reordered, tab.modelData.id, drop.targetId, drop.after);
+                                Qt.callLater(bar.reordered, id, drop.targetId, drop.after);
                             }
                         }
                     }
 
-                    onCanceled: bar.insertion = null
+                    onCanceled: if (bar.pressedTabId === tab.modelData.id) bar.cancelTabDrag()
 
                     onClicked: event => {
                         if (event.button === Qt.RightButton) {
                             const position = bar.readCursorPosition();
                             Qt.callLater(bar.openTabMenu, tab.modelData.id, position);
-                        } else if (!dragging) {
-                            tabMenu.close();
-                            bar.selected(tab.modelData.id);
                         }
                     }
                 }

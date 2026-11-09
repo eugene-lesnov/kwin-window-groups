@@ -37,6 +37,9 @@ public Q_SLOTS:
     Q_SCRIPTABLE QString reloadStatus() const;
 #endif
 
+Q_SIGNALS:
+    void escapePressed();
+
 private:
     class Spy;
     std::unique_ptr<Spy> m_spy;

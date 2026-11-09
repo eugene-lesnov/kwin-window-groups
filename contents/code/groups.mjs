@@ -169,11 +169,11 @@ export function createController(workspace, ui) {
         return true;
     }
 
-    function release(entry, keepPosition, deferred = false) {
+    function release(entry, keepPosition, handledNatively = false) {
         const { window, group, attached } = entry;
         entry.group = null;
         entry.attached = false;
-        if (!deferred && attached && window && !window.deleted) {
+        if (!handledNatively && attached && window && !window.deleted) {
             const handledMaximization = group.host.detachTab(window);
             const tile = entry.originalTile;
             const restoreTile = tile?.manage && !tile.isLayout;
@@ -192,14 +192,14 @@ export function createController(workspace, ui) {
         entry.originalTile = null;
     }
 
-    function dissolve(group, keepPosition = null, activateAfterClose = null) {
+    function dissolve(group, keepPosition = null, activateSurvivor = null) {
         groups.delete(group);
         group.host.changed.disconnect(scheduleRefresh);
         group.host.closeRequested.disconnect(group.close);
         group.bar.view = null;
         group.bar.destroy();
-        const deferred = activateAfterClose !== null && keepPosition?.attached === true
-            && group.host.deferLastTabRelease?.(keepPosition.window, activateAfterClose) === true;
+        const deferred = activateSurvivor !== null && keepPosition?.attached === true
+            && group.host.deferLastTabRelease?.(keepPosition.window, activateSurvivor) === true;
         for (const entry of group.members) {
             release(entry, entry === keepPosition, deferred && entry === keepPosition);
         }
@@ -319,10 +319,17 @@ export function createController(workspace, ui) {
         requestSelection(source);
     }
 
-    function removeFromGroup(entry, closing) {
+    function removeFromGroup(entry, closing, dropPosition = null) {
         const group = entry.group;
         if (!group || !groups.has(group)) {
             return;
+        }
+        const dropped = dropPosition !== null;
+        if (dropped) {
+            const frame = entry.originalFrame;
+            if (!entry.attached || !group.host.detachTabAt(entry.window, dropPosition, Qt.size(frame.width, frame.height))) {
+                return;
+            }
         }
         const index = group.members.indexOf(entry);
         const wasActive = entry === group.active;
@@ -332,14 +339,14 @@ export function createController(workspace, ui) {
         if (closing) {
             entry.group = null;
         } else {
-            release(entry, false);
+            release(entry, false, dropped);
         }
         if (wasActive) {
             group.active = group.members[Math.min(index, group.members.length - 1)];
             group.focusPending = shouldFocus;
         }
         if (group.members.length <= 1) {
-            const deferred = dissolve(group, group.active, closing ? shouldFocus : null);
+            const deferred = dissolve(group, group.active, closing || dropped ? shouldFocus : null);
             if (!deferred && shouldFocus && group.active && isVisible(group.active.window)) {
                 workspace.activeWindow = group.active.window;
             }
@@ -438,9 +445,11 @@ export function createController(workspace, ui) {
                 entry.icon = entry.icon ?? ui.tabIcon(entry.window);
                 return { id: entry.id, caption: entry.window.caption, icon: entry.icon };
             });
+            group.bar.tabs = group.tabs;
         }
         group.bar.view = {
-            rect, workArea: area, activeIndex: group.members.indexOf(group.active), tabs: group.tabs
+            rect, workArea: area, activeIndex: group.members.indexOf(group.active),
+            windowForTab: id => windows.get(id)?.window
         };
         group.bar.interactive = interactive;
         group.host.setTabBarInteractive(interactive);
@@ -536,6 +545,9 @@ export function createController(workspace, ui) {
     function workspaceChanged() {
         drag = null;
         marked = null;
+        for (const group of groups) {
+            group.bar.cancelTabDrag();
+        }
         scheduleRefresh();
     }
 
@@ -637,6 +649,14 @@ export function createController(workspace, ui) {
                 removeFromGroup(entry, false);
                 refresh();
             }
+        },
+        detachDragged(bar, id, position) {
+            const entry = windows.get(id);
+            if (stopped || entry?.group?.bar !== bar || ui.blocked() || !canGroup(entry)) {
+                return;
+            }
+            removeFromGroup(entry, false, position);
+            refresh();
         },
         ungroup() {
             const group = focusedEntry()?.group;

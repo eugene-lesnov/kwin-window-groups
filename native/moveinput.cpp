@@ -25,7 +25,8 @@ namespace KWIN_WINDOW_TABS_NAMESPACE
 class MoveInput::Spy final : public KWin::InputEventSpy
 {
 public:
-    Spy()
+    explicit Spy(MoveInput *owner)
+        : m_owner(owner)
     {
         m_resetTimer.setSingleShot(true);
         QObject::connect(&m_resetTimer, &QTimer::timeout, &m_resetTimer, [this] {
@@ -60,9 +61,12 @@ public:
         clearButtonEvent();
     }
 
-    void keyboardKey(KWin::KeyboardKeyEvent *) override
+    void keyboardKey(KWin::KeyboardKeyEvent *event) override
     {
         clearButtonEvent();
+        if (event->key == Qt::Key_Escape && event->state == KWin::KeyboardKeyState::Pressed) {
+            Q_EMIT m_owner->escapePressed();
+        }
     }
 
     QPointer<QObject> m_pressedWindow;
@@ -75,6 +79,7 @@ private:
         m_releasedWindow.clear();
     }
 
+    MoveInput *m_owner;
     QTimer m_resetTimer;
 };
 
@@ -84,7 +89,7 @@ MoveInput::MoveInput(QObject *parent)
     if (QCoreApplication::applicationVersion() == KWIN_VERSION_STRING
         && QGuiApplication::platformName() == QStringLiteral("wayland-org.kde.kwin.qpa")
         && KWin::input()) {
-        m_spy = std::make_unique<Spy>();
+        m_spy = std::make_unique<Spy>(this);
     }
 }
 

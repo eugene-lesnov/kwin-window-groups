@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import org.kde.kwin 3.0 as KWinApi
 import org.kde.kirigami as Kirigami
@@ -9,6 +11,7 @@ Item {
     property var controller: null
     property var tabs: null
     property var hint: null
+    property var groupingHint: null
     readonly property string translationDomain: dragInput.translationDomain
     readonly property var workspace: KWinApi.Workspace
     readonly property int stripHeight: Math.round(Kirigami.Units.gridUnit * 1.6)
@@ -18,9 +21,10 @@ Item {
         return fullscreenEffects.some(effect => workspace.isEffectActive(effect));
     }
 
-    function createTabBar() {
+    function createTabBar(workAreaAt) {
         const bar = tabsComponent.createObject(null, {
             readCursorPosition: () => root.workspace.cursorPos,
+            workAreaAt: workAreaAt,
             stripHeight: root.stripHeight
         }) as TabBarWindow;
         if (bar) {
@@ -28,6 +32,7 @@ Item {
             bar.closeRequested.connect(id => controller.closeTab(id));
             bar.reordered.connect((id, targetId, after) => controller.reorder(id, targetId, after));
             bar.detached.connect(id => controller.detach(id));
+            bar.droppedOutside.connect((id, position) => controller.detachDragged(bar, id, position));
             bar.ungrouped.connect(() => controller.ungroup());
         }
         return bar;
@@ -40,11 +45,15 @@ Item {
 
     Component {
         id: hintComponent
-        DropHintWindow { translationDomain: root.translationDomain }
+        DropHintWindow {
+            translationDomain: root.translationDomain
+            view: root.tabs?.detachHint ?? root.groupingHint
+        }
     }
 
     DragInput {
         id: dragInput
+        onEscapePressed: root.tabs?.cancelTabDrag()
     }
 
     Timer {
@@ -99,8 +108,9 @@ Item {
             throw new Error("Window Tabs could not create its drop hint");
         }
         const maximizeArea = KWin.MaximizeArea ?? 2;
+        const workArea = output => workspace.clientArea(maximizeArea, output, workspace.currentDesktop);
         controller = Groups.createController(workspace, {
-            workArea: window => workspace.clientArea(maximizeArea, window.output, workspace.currentDesktop),
+            workArea: window => workArea(window.output),
             stripHeight: () => root.stripHeight,
             isOverlay: window => window.caption === "org.kde.kwin-window-tabs.bar" || window.caption === "org.kde.kwin-window-tabs.menu"
                 || window.caption === hint.title,
@@ -109,7 +119,7 @@ Item {
             restoredFrame: window => dragInput.restoredFrame(window),
             tabIcon: window => dragInput.tabIcon(window),
             createGroupWindow: window => dragInput.createGroupWindow(window, root.stripHeight, i18nd(root.translationDomain, "Window Tabs")),
-            createTabBar: () => root.createTabBar(),
+            createTabBar: () => root.createTabBar(position => workArea(workspace.screenAt(position))),
             groupTitle: caption => i18nd(root.translationDomain, "Window Tabs — %1", caption),
             blocked: overlaysBlocked,
             isMetaLeftPressFor: window => dragInput.isMetaLeftPressFor(window),
@@ -121,7 +131,7 @@ Item {
             update: (activeBar, hintView) => {
                 tabs = activeBar;
                 hint.suppressed = overlaysBlocked();
-                hint.view = hintView;
+                groupingHint = hintView;
             }
         });
         controller.start();

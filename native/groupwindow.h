@@ -47,6 +47,7 @@ public:
     Q_INVOKABLE bool canKeepTab(QObject *object) const;
     Q_INVOKABLE bool deferLastTabRelease(QObject *object, bool activate);
     Q_INVOKABLE bool detachTab(QObject *object);
+    Q_INVOKABLE bool detachTabAt(QObject *object, const QPointF &position, const QSizeF &size);
     Q_INVOKABLE void placeTab(QObject *object, bool active, bool visible);
     Q_INVOKABLE void focusTab(QObject *object, bool activate);
     Q_INVOKABLE void dispose();
