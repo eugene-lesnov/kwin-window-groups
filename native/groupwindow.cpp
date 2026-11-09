@@ -27,6 +27,9 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+namespace KWIN_WINDOW_TABS_NAMESPACE
+{
+
 class GroupWindow::Surface
 {
 public:
@@ -512,22 +515,15 @@ void GroupWindow::finishMaximizedSetup()
     }
 }
 
-bool GroupWindow::canRestoreAnchorMaximization() const
-{
-    return m_anchorUnmaximized && m_anchor && !m_anchor->isDeleted() && m_anchor->output()
-        && m_anchor->requestedMaximizeMode() == KWin::MaximizeRestore && !m_anchor->isRequestedFullScreen()
-        && !m_anchor->requestedTile() && !m_anchor->isInteractiveMove() && !m_anchor->isInteractiveResize();
-}
-
 bool GroupWindow::restoreAnchorMaximization()
 {
-    const bool restore = canRestoreAnchorMaximization();
     auto *anchor = m_anchor.data();
     m_anchor.clear();
     if (!m_anchorUnmaximized || !anchor || anchor->isDeleted()) {
         return false;
     }
-    if (restore) {
+    if (anchor->output() && anchor->requestedMaximizeMode() == KWin::MaximizeRestore && !anchor->isRequestedFullScreen()
+        && !anchor->requestedTile() && !anchor->isInteractiveMove() && !anchor->isInteractiveResize()) {
         auto frame = m_anchorRestoreFrame;
         if (frame.isValid()) {
             const auto area = KWin::workspace()->clientArea(KWin::MaximizeArea, anchor);
@@ -711,13 +707,29 @@ bool GroupWindow::canKeepTab(QObject *object) const
     return m_tabs.contains(tab) && !tab->nextDecoration();
 }
 
-bool GroupWindow::deferAnchorRelease(QObject *object, bool activate)
+bool GroupWindow::deferLastTabRelease(QObject *object, bool activate)
 {
     auto *tab = qobject_cast<KWin::Window *>(object);
     const auto it = m_tabs.find(tab);
-    if (m_disposed || m_failed || it == m_tabs.end() || tab != m_anchor || !canRestoreAnchorMaximization()
-        || !m_window || !m_window->isShown() || !m_window->isOnCurrentDesktop() || !m_window->isOnCurrentActivity()) {
+    if (m_disposed || m_failed || !m_window || m_window->isDeleted() || it == m_tabs.end() || tab->isDeleted()) {
         return false;
+    }
+    if (it->offscreenRendering) {
+        return true;
+    }
+    if (!tab->output() || !tab->isMovable() || !tab->isResizable() || tab->isRequestedFullScreen()
+        || tab->requestedTile() || tab->isInteractiveMove() || tab->isInteractiveResize()) {
+        return false;
+    }
+
+    auto frame = m_window->frameGeometry();
+    if (!frame.isValid()) {
+        return false;
+    }
+    const auto mode = m_window->maximizeMode();
+    const auto restoreFrame = m_window->geometryRestore();
+    if (m_anchor == tab) {
+        m_anchor.clear();
     }
 
     const auto decoration = it->originalDecoration;
@@ -727,14 +739,20 @@ bool GroupWindow::deferAnchorRelease(QObject *object, bool activate)
 
     auto *workspace = KWin::workspace();
     const bool transferFocus = activate || workspace->activeWindow() == tab;
-    if (transferFocus && !KWin::waylandServer()->isScreenLocked()) {
+    if (transferFocus && m_window->isShown() && m_window->isOnCurrentDesktop() && m_window->isOnCurrentActivity()
+        && !KWin::waylandServer()->isScreenLocked()) {
         workspace->activateWindow(m_window, true);
     }
     setTabBar(nullptr);
     selectTab(nullptr);
     tab->setHidden(true);
     restoreTabDecoration(tab, decoration);
-    restoreAnchorMaximization();
+    frame.setSize(tab->constrainFrameSize(frame.size()));
+    tab->moveResize(frame);
+    if (tab->requestedMaximizeMode() != mode) {
+        tab->maximize(mode, mode == KWin::MaximizeRestore ? frame : restoreFrame);
+    }
+    const auto requestedMode = tab->requestedMaximizeMode();
 
     const QPointer<KWin::Window> survivor(tab);
     const auto finish = [this, survivor, workspace] {
@@ -745,20 +763,25 @@ bool GroupWindow::deferAnchorRelease(QObject *object, bool activate)
         const bool hostFocused = m_window && workspace->activeWindow() == m_window;
         if (survivor && !survivor->isDeleted()) {
             detachTab(survivor);
-            if (hostFocused && survivor->isShown() && survivor->isOnCurrentDesktop() && survivor->isOnCurrentActivity()
+            if (hostFocused && survivor && survivor->isShown() && survivor->isOnCurrentDesktop() && survivor->isOnCurrentActivity()
                 && !KWin::waylandServer()->isScreenLocked()) {
                 workspace->activateWindow(survivor, true);
             }
         }
         dispose();
     };
-    const auto check = [this, survivor, finish] {
-        if (m_failed || !m_window || !m_window->isShown() || !survivor || survivor->isDeleted()
-            || survivor->requestedMaximizeMode() != m_anchorMaximizeMode || survivor->maximizeMode() == m_anchorMaximizeMode) {
+    const auto check = [this, survivor, requestedMode, finish] {
+        if (m_failed || !m_window || !survivor || survivor->isDeleted() || survivor->requestedMaximizeMode() != requestedMode
+            || (survivor->maximizeMode() == requestedMode && survivor->frameGeometry() == survivor->moveResizeGeometry()
+                && survivor->decoration() == survivor->nextDecoration())) {
             finish();
         }
     };
+    connect(tab, &KWin::Window::frameGeometryChanged, this, check, Qt::QueuedConnection);
     connect(tab, &KWin::Window::maximizedChanged, this, check, Qt::QueuedConnection);
+    if (auto *surface = tab->surface()) {
+        connect(surface, &KWin::SurfaceInterface::committed, this, check, Qt::QueuedConnection);
+    }
     connect(tab, &KWin::Window::closed, this, finish, Qt::QueuedConnection);
     connect(this, &GroupWindow::closeRequested, this, [survivor] {
         if (survivor && !survivor->isDeleted() && survivor->isCloseable()) {
@@ -907,4 +930,6 @@ void GroupWindow::dispose()
     }
     restoreAnchorMaximization();
     deleteLater();
+}
+
 }

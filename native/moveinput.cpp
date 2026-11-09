@@ -15,6 +15,13 @@
 #include <QPointer>
 #include <QTimer>
 
+#ifdef KWIN_WINDOW_TABS_BUILD_ID
+#include <QDBusConnection>
+#endif
+
+namespace KWIN_WINDOW_TABS_NAMESPACE
+{
+
 class MoveInput::Spy final : public KWin::InputEventSpy
 {
 public:
@@ -82,6 +89,28 @@ MoveInput::MoveInput(QObject *parent)
 }
 
 MoveInput::~MoveInput() = default;
+
+#ifdef KWIN_WINDOW_TABS_BUILD_ID
+bool MoveInput::registerReloadStatus(const QUrl &entry)
+{
+    const QString entryPath = entry.toLocalFile();
+    if (!m_spy || !KWin::waylandServer() || entryPath.isEmpty() || !m_reloadEntry.isEmpty()) {
+        return false;
+    }
+    if (!QDBusConnection::sessionBus().registerObject(
+            QStringLiteral("/Scripting/WindowTabsReload"), QStringLiteral("org.kde.kwin.WindowTabs.Reload"),
+            this, QDBusConnection::ExportScriptableSlots)) {
+        return false;
+    }
+    m_reloadEntry = entryPath;
+    return true;
+}
+
+QString MoveInput::reloadStatus() const
+{
+    return QStringLiteral(KWIN_WINDOW_TABS_BUILD_ID) + u'\n' + m_reloadEntry;
+}
+#endif
 
 QString MoveInput::registerTranslationCatalog(const QUrl &localeDirectory) const
 {
@@ -181,4 +210,6 @@ GroupWindow *MoveInput::createGroupWindow(QObject *anchor, int stripHeight, cons
         return nullptr;
     }
     return new GroupWindow(window, stripHeight, title, this);
+}
+
 }

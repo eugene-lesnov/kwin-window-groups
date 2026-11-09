@@ -199,7 +199,7 @@ export function createController(workspace, ui) {
         group.bar.view = null;
         group.bar.destroy();
         const deferred = activateAfterClose !== null && keepPosition?.attached === true
-            && group.host.deferAnchorRelease?.(keepPosition.window, activateAfterClose) === true;
+            && group.host.deferLastTabRelease?.(keepPosition.window, activateAfterClose) === true;
         for (const entry of group.members) {
             release(entry, entry === keepPosition, deferred && entry === keepPosition);
         }
@@ -321,7 +321,7 @@ export function createController(workspace, ui) {
 
     function removeFromGroup(entry, closing) {
         const group = entry.group;
-        if (!group) {
+        if (!group || !groups.has(group)) {
             return;
         }
         const index = group.members.indexOf(entry);

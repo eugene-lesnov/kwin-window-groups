@@ -9,6 +9,9 @@
 #include <QtQml/qqmlregistration.h>
 #include <memory>
 
+namespace KWIN_WINDOW_TABS_NAMESPACE
+{
+
 class MoveInput : public QObject
 {
     Q_OBJECT
@@ -27,7 +30,19 @@ public:
     Q_INVOKABLE bool isGroupWindow(QObject *window) const;
     Q_INVOKABLE GroupWindow *createGroupWindow(QObject *anchor, int stripHeight, const QString &title);
 
+#ifdef KWIN_WINDOW_TABS_BUILD_ID
+    Q_INVOKABLE bool registerReloadStatus(const QUrl &entry);
+
+public Q_SLOTS:
+    Q_SCRIPTABLE QString reloadStatus() const;
+#endif
+
 private:
     class Spy;
     std::unique_ptr<Spy> m_spy;
+#ifdef KWIN_WINDOW_TABS_BUILD_ID
+    QString m_reloadEntry;
+#endif
 };
+
+}

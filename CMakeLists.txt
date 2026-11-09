@@ -16,16 +16,32 @@ find_program(WAYLAND_SCANNER wayland-scanner REQUIRED)
 
 qt_policy(SET QTP0001 NEW)
 
-set(input_module_dir "${CMAKE_CURRENT_BINARY_DIR}/org/kde/kwinwindowtabs/input")
+set(input_module_uri org.kde.kwinwindowtabs.input)
+set(input_namespace KWinWindowTabs)
+if(DEFINED KWIN_WINDOW_TABS_BUILD_ID)
+    if(NOT "${KWIN_WINDOW_TABS_BUILD_ID}" MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "KWIN_WINDOW_TABS_BUILD_ID must be a hexadecimal identifier")
+    endif()
+    string(APPEND input_module_uri ".rev_${KWIN_WINDOW_TABS_BUILD_ID}")
+    string(APPEND input_namespace "_${KWIN_WINDOW_TABS_BUILD_ID}")
+endif()
+string(REPLACE "." "/" input_module_path "${input_module_uri}")
+set(input_module_dir "${CMAKE_CURRENT_BINARY_DIR}/${input_module_path}")
 qt_add_qml_module(kwinwindowtabsinput
-    URI org.kde.kwinwindowtabs.input
+    URI "${input_module_uri}"
     VERSION 1.0
     PLUGIN_TARGET kwinwindowtabsinput
     OUTPUT_DIRECTORY "${input_module_dir}"
     SOURCES native/moveinput.h native/moveinput.cpp native/groupwindow.h native/groupwindow.cpp
 )
 target_include_directories(kwinwindowtabsinput PRIVATE native "${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_definitions(kwinwindowtabsinput PRIVATE "KWIN_WINDOW_TABS_NAMESPACE=${input_namespace}")
 target_link_libraries(kwinwindowtabsinput PRIVATE KWin::kwin KF6::I18n KF6::Service Qt6::Qml Wayland::Client)
+if(DEFINED KWIN_WINDOW_TABS_BUILD_ID)
+    target_compile_definitions(kwinwindowtabsinput PRIVATE "KWIN_WINDOW_TABS_BUILD_ID=\"${KWIN_WINDOW_TABS_BUILD_ID}\"")
+    target_link_libraries(kwinwindowtabsinput PRIVATE Qt6::DBus)
+    set_target_properties(kwinwindowtabsinput PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+endif()
 
 function(add_wayland_protocol name protocol_dir qt_dir)
     find_file(${name}_xml "${name}.xml"
