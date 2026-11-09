@@ -8,6 +8,7 @@
 #include <window.h>
 #include <workspace.h>
 
+#include <KApplicationTrader>
 #include <KLocalizedString>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -108,6 +109,60 @@ bool MoveInput::canHostTab(QObject *window, bool allowMaximized) const
         && GroupWindow::canHostTab(qobject_cast<KWin::Window *>(window), allowMaximized);
 }
 
+QRectF MoveInput::restoredFrame(QObject *object) const
+{
+    const auto *window = qobject_cast<KWin::Window *>(object);
+    if (!window) {
+        return {};
+    }
+    const auto frame = window->geometryRestore();
+    return frame.isValid() ? frame : window->frameGeometry();
+}
+
+QIcon MoveInput::tabIcon(QObject *object) const
+{
+    const auto *window = qobject_cast<KWin::Window *>(object);
+    if (!window) {
+        return {};
+    }
+    const QIcon icon = window->icon();
+    if (!icon.isNull() && icon.name() != QStringLiteral("wayland")) {
+        return icon;
+    }
+
+    const auto loadIcon = [](const QString &name) {
+        const QFileInfo file(name);
+        if (file.isAbsolute()) {
+            return file.isFile() ? QIcon(name) : QIcon();
+        }
+        return QIcon::fromTheme(name);
+    };
+    const QString desktopId = window->desktopFileName();
+    const QIcon desktopIcon = loadIcon(KWin::Window::iconFromDesktopFile(desktopId));
+    if (!desktopIcon.isNull()) {
+        return desktopIcon;
+    }
+
+    const QString windowClass = window->resourceClass();
+    const auto matchesWindow = [&](const QString &id) {
+        return !id.isEmpty() && (id.compare(desktopId, Qt::CaseInsensitive) == 0
+            || id.compare(windowClass, Qt::CaseInsensitive) == 0);
+    };
+    if (!desktopId.isEmpty() || !windowClass.isEmpty()) {
+        const auto services = KApplicationTrader::query([&](const KService::Ptr &service) {
+            return matchesWindow(service->desktopEntryName())
+                || matchesWindow(service->property<QString>(QStringLiteral("StartupWMClass")));
+        });
+        for (const auto &service : services) {
+            const QIcon serviceIcon = loadIcon(service->icon());
+            if (!serviceIcon.isNull()) {
+                return serviceIcon;
+            }
+        }
+    }
+    return icon;
+}
+
 bool MoveInput::isGroupWindow(QObject *window) const
 {
     const auto *candidate = qobject_cast<KWin::Window *>(window);
@@ -121,8 +176,9 @@ bool MoveInput::isGroupWindow(QObject *window) const
 
 GroupWindow *MoveInput::createGroupWindow(QObject *anchor, int stripHeight, const QString &title)
 {
-    if (!canHostTab(anchor, false)) {
+    auto *window = qobject_cast<KWin::Window *>(anchor);
+    if (!canHostTab(anchor, true) || window->requestedMaximizeMode() != window->maximizeMode()) {
         return nullptr;
     }
-    return new GroupWindow(qobject_cast<KWin::Window *>(anchor), stripHeight, title, this);
+    return new GroupWindow(window, stripHeight, title, this);
 }

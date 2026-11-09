@@ -2,7 +2,9 @@
 
 #include "groupwindow.h"
 
+#include <QIcon>
 #include <QObject>
+#include <QRectF>
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
@@ -20,6 +22,8 @@ public:
     Q_INVOKABLE bool isMetaLeftPressFor(QObject *window) const;
     Q_INVOKABLE bool isLeftReleaseFor(QObject *window) const;
     Q_INVOKABLE bool canHostTab(QObject *window, bool allowMaximized) const;
+    Q_INVOKABLE QRectF restoredFrame(QObject *window) const;
+    Q_INVOKABLE QIcon tabIcon(QObject *window) const;
     Q_INVOKABLE bool isGroupWindow(QObject *window) const;
     Q_INVOKABLE GroupWindow *createGroupWindow(QObject *anchor, int stripHeight, const QString &title);
 

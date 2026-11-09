@@ -106,6 +106,8 @@ Item {
                 || window.caption === hint.title,
             isGroupWindow: window => dragInput.isGroupWindow(window),
             canHostTab: (window, allowMaximized) => dragInput.canHostTab(window, allowMaximized),
+            restoredFrame: window => dragInput.restoredFrame(window),
+            tabIcon: window => dragInput.tabIcon(window),
             createGroupWindow: window => dragInput.createGroupWindow(window, root.stripHeight, i18nd(root.translationDomain, "Window Tabs")),
             createTabBar: () => root.createTabBar(),
             groupTitle: caption => i18nd(root.translationDomain, "Window Tabs — %1", caption),

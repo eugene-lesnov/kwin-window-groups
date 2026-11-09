@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 6.10 REQUIRED COMPONENTS DBus Qml Widgets)
 find_package(KWin 6.7.6 EXACT REQUIRED CONFIG)
 find_package(KF6I18n REQUIRED)
+find_package(KF6Service REQUIRED)
 find_package(Wayland REQUIRED Client)
 find_package(PkgConfig REQUIRED)
 pkg_get_variable(wayland_protocols_data wayland-protocols pkgdatadir)
@@ -24,7 +25,7 @@ qt_add_qml_module(kwinwindowtabsinput
     SOURCES native/moveinput.h native/moveinput.cpp native/groupwindow.h native/groupwindow.cpp
 )
 target_include_directories(kwinwindowtabsinput PRIVATE native "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(kwinwindowtabsinput PRIVATE KWin::kwin KF6::I18n Qt6::Qml Wayland::Client)
+target_link_libraries(kwinwindowtabsinput PRIVATE KWin::kwin KF6::I18n KF6::Service Qt6::Qml Wayland::Client)
 
 function(add_wayland_protocol name protocol_dir qt_dir)
     find_file(${name}_xml "${name}.xml"

@@ -347,7 +347,24 @@ GroupWindow::GroupWindow(KWin::Window *anchor, int stripHeight, const QString &t
     : QObject(parent)
     , m_anchor(anchor)
     , m_stripHeight(stripHeight)
+    , m_anchorMaximizeMode(anchor->maximizeMode())
+    , m_anchorRestoreFrame(anchor->geometryRestore())
 {
+    if (m_anchorMaximizeMode != KWin::MaximizeRestore) {
+        const auto frame = anchor->frameGeometry();
+        if (!m_anchorRestoreFrame.isValid()) {
+            m_anchorRestoreFrame = frame;
+        } else {
+            if (!(m_anchorMaximizeMode & KWin::MaximizeHorizontal)) {
+                m_anchorRestoreFrame.setLeft(frame.left());
+                m_anchorRestoreFrame.setRight(frame.right());
+            }
+            if (!(m_anchorMaximizeMode & KWin::MaximizeVertical)) {
+                m_anchorRestoreFrame.setTop(frame.top());
+                m_anchorRestoreFrame.setBottom(frame.bottom());
+            }
+        }
+    }
     connect(KWin::workspace(), &KWin::Workspace::windowAdded, this, &GroupWindow::adoptWindow);
     connect(KWin::workspace(), &KWin::Workspace::stackingOrderChanged, this, [this] {
         if (!m_disposed && m_window) {
@@ -357,7 +374,7 @@ GroupWindow::GroupWindow(KWin::Window *anchor, int stripHeight, const QString &t
     });
     m_surface = std::make_unique<Surface>(this, anchor->clientSize().toSize() + QSize(0, stripHeight), title);
     QTimer::singleShot(3000, this, [this] {
-        if (!m_window) {
+        if (!m_ready) {
             fail();
         }
     });
@@ -372,20 +389,18 @@ GroupWindow::~GroupWindow()
     for (auto *tab : tabs) {
         detachTab(tab);
     }
+    restoreAnchorMaximization();
 }
 
 bool GroupWindow::canHostTab(const KWin::Window *window, bool allowMaximized)
 {
     if (!window || window->isDeleted() || window->isHidden() || window->isMinimized() || !window->surface()
-        || !window->windowItem() || !window->userCanSetNoBorder() || !window->windowManagementInterface()) {
+        || !window->windowItem() || !window->windowManagementInterface()) {
         return false;
     }
-#if KWIN_BUILD_X11
-    if (window->surface()->client() == KWin::waylandServer()->xWaylandConnection()) {
-        return false;
-    }
-#endif
-    return window->isDecorated() || (allowMaximized && window->maximizeMode() != KWin::MaximizeRestore);
+    return (allowMaximized || (window->maximizeMode() == KWin::MaximizeRestore
+        && window->requestedMaximizeMode() == KWin::MaximizeRestore))
+        && (!window->nextDecoration() || window->userCanSetNoBorder());
 }
 
 bool GroupWindow::ownsWindow(const KWin::Window *window) const
@@ -395,7 +410,7 @@ bool GroupWindow::ownsWindow(const KWin::Window *window) const
 
 QObject *GroupWindow::window() const
 {
-    return m_window;
+    return m_ready ? m_window.data() : nullptr;
 }
 
 bool GroupWindow::failed() const
@@ -413,7 +428,7 @@ void GroupWindow::adoptWindow(KWin::Window *window)
     if (m_disposed || m_failed || m_window || !ownsWindow(window)) {
         return;
     }
-    if (!m_anchor || m_anchor->isDeleted() || !window->windowItem()
+    if (!m_anchor || m_anchor->isDeleted() || !m_anchor->output() || !window->windowItem()
         || !window->windowManagementInterface() || !window->isDecorated()) {
         fail();
         return;
@@ -426,8 +441,11 @@ void GroupWindow::adoptWindow(KWin::Window *window)
     const auto area = KWin::workspace()->clientArea(KWin::MaximizeArea, m_anchor.data());
     auto frame = window->frameGeometry();
     frame.moveTopLeft(m_anchor->frameGeometry().topLeft());
+    if (m_anchorMaximizeMode != KWin::MaximizeRestore && m_anchorRestoreFrame.isValid()) {
+        frame = m_anchorRestoreFrame;
+        frame.setHeight(frame.height() + m_stripHeight);
+    }
     window->moveResize(window->keepInArea(frame, area));
-    m_anchor.clear();
 
     connect(window, &KWin::Window::frameGeometryChanged, this, &GroupWindow::changed);
     connect(window, &KWin::Window::clientGeometryChanged, this, &GroupWindow::changed);
@@ -447,7 +465,71 @@ void GroupWindow::adoptWindow(KWin::Window *window)
         m_window.clear();
         fail();
     });
-    Q_EMIT changed();
+    if (m_anchorMaximizeMode == KWin::MaximizeRestore) {
+        m_anchor.clear();
+        m_ready = true;
+        Q_EMIT changed();
+        return;
+    }
+
+    window->setHidden(true);
+    connect(window, &KWin::Window::maximizedChanged, this, &GroupWindow::finishMaximizedSetup, Qt::QueuedConnection);
+    connect(m_anchor.data(), &KWin::Window::maximizedChanged, this, &GroupWindow::finishMaximizedSetup, Qt::QueuedConnection);
+    window->maximize(m_anchorMaximizeMode, window->moveResizeGeometry());
+    finishMaximizedSetup();
+}
+
+void GroupWindow::finishMaximizedSetup()
+{
+    if (m_ready || m_disposed || m_failed) {
+        return;
+    }
+    if (!m_window || m_window->requestedMaximizeMode() != m_anchorMaximizeMode
+        || !canHostTab(m_anchor.data(), true) || m_anchor->isRequestedFullScreen()
+        || m_anchor->isInteractiveMove() || m_anchor->isInteractiveResize() || m_anchor->requestedTile()) {
+        fail();
+        return;
+    }
+    if (m_window->maximizeMode() != m_anchorMaximizeMode) {
+        return;
+    }
+    if (!m_anchorUnmaximized) {
+        if (m_anchor->requestedMaximizeMode() != m_anchorMaximizeMode) {
+            fail();
+            return;
+        }
+        m_anchor->maximize(KWin::MaximizeRestore);
+        m_anchorUnmaximized = m_anchor->requestedMaximizeMode() == KWin::MaximizeRestore;
+    }
+    if (!m_anchorUnmaximized || m_anchor->requestedMaximizeMode() != KWin::MaximizeRestore) {
+        fail();
+        return;
+    }
+    if (m_anchor->maximizeMode() == KWin::MaximizeRestore) {
+        m_ready = true;
+        m_window->setHidden(false);
+        Q_EMIT changed();
+    }
+}
+
+bool GroupWindow::restoreAnchorMaximization()
+{
+    auto *anchor = m_anchor.data();
+    m_anchor.clear();
+    if (!m_anchorUnmaximized || !anchor || anchor->isDeleted()) {
+        return false;
+    }
+    if (anchor->output() && anchor->requestedMaximizeMode() == KWin::MaximizeRestore && !anchor->isRequestedFullScreen()
+        && !anchor->requestedTile() && !anchor->isInteractiveMove() && !anchor->isInteractiveResize()) {
+        auto frame = m_anchorRestoreFrame;
+        if (frame.isValid()) {
+            const auto area = KWin::workspace()->clientArea(KWin::MaximizeArea, anchor);
+            frame = anchor->keepInArea(frame, area);
+            anchor->moveResize(frame);
+        }
+        anchor->maximize(m_anchorMaximizeMode, frame);
+    }
+    return true;
 }
 
 void GroupWindow::setTabBar(QObject *object)
@@ -528,16 +610,21 @@ void GroupWindow::updateScene()
     }
 }
 
+bool GroupWindow::ensureCaptureProtection()
+{
+    if (!m_window->excludeFromCapture()) {
+        m_window->setExcludeFromCapture(true);
+    }
+    return m_window->excludeFromCapture();
+}
+
 void GroupWindow::protectCapture()
 {
-    if (m_window && m_captureProtected && !m_window->excludeFromCapture()) {
-        m_window->setExcludeFromCapture(true);
-        if (!m_window->excludeFromCapture()) {
-            selectTab(nullptr);
-            m_window->setHidden(true);
-            setTabBarInteractive(false);
-            fail();
-        }
+    if (m_window && m_captureProtected && !ensureCaptureProtection()) {
+        selectTab(nullptr);
+        m_window->setHidden(true);
+        setTabBarInteractive(false);
+        fail();
     }
 }
 
@@ -552,20 +639,42 @@ void GroupWindow::fail()
 bool GroupWindow::attachTab(QObject *object)
 {
     auto *tab = qobject_cast<KWin::Window *>(object);
-    if (!m_window || !canHostTab(tab)) {
+    if (!m_ready || !m_window || m_failed || !canHostTab(tab)) {
         return false;
     }
-    const auto decoration = tab->decorationPolicy();
-    tab->setNoBorder(true);
-    if (!tab->noBorder()) {
-        tab->setDecorationPolicy(decoration);
+    std::optional<KWin::DecorationPolicy> originalDecoration;
+    if (tab->nextDecoration()) {
+        originalDecoration = tab->decorationPolicy();
+        tab->setNoBorder(true);
+        if (!tab->noBorder()) {
+            tab->setDecorationPolicy(*originalDecoration);
+            return false;
+        }
+    }
+    const bool skipTaskbar = tab->skipTaskbar();
+    std::optional<bool> originalSkipTaskbar;
+#if KWIN_BUILD_X11
+    if (tab->surface()->client() == KWin::waylandServer()->xWaylandConnection()) {
+        originalSkipTaskbar = tab->originalSkipTaskbar();
+        tab->setOriginalSkipTaskbar(true);
+    }
+#endif
+    if ((originalSkipTaskbar.has_value() && !tab->originalSkipTaskbar())
+        || (tab->excludeFromCapture() && !ensureCaptureProtection())) {
+        if (originalSkipTaskbar.has_value()) {
+            tab->setOriginalSkipTaskbar(*originalSkipTaskbar);
+        }
+        if (originalDecoration) {
+            tab->setDecorationPolicy(*originalDecoration);
+        }
         return false;
     }
     const auto protectTab = [this, tab] {
         m_captureProtected = m_captureProtected || tab->excludeFromCapture();
         protectCapture();
     };
-    m_tabs.insert(tab, {decoration, tab->skipTaskbar(), tab->skipSwitcher(), tab->skipsCloseAnimation(), false,
+    m_tabs.insert(tab, {originalDecoration, originalSkipTaskbar, skipTaskbar, tab->skipSwitcher(),
+        tab->skipsCloseAnimation(), false,
         connect(tab, &KWin::Window::closed, this, [this, tab] {
             if (m_activeTab == tab) {
                 selectTab(nullptr);
@@ -587,12 +696,18 @@ bool GroupWindow::attachTab(QObject *object)
     return true;
 }
 
-void GroupWindow::detachTab(QObject *object)
+bool GroupWindow::canKeepTab(QObject *object) const
+{
+    auto *tab = qobject_cast<KWin::Window *>(object);
+    return m_tabs.contains(tab) && !tab->nextDecoration();
+}
+
+bool GroupWindow::detachTab(QObject *object)
 {
     auto *tab = qobject_cast<KWin::Window *>(object);
     const auto it = m_tabs.find(tab);
     if (it == m_tabs.end()) {
-        return;
+        return false;
     }
     const Tab state = it.value();
     m_tabs.erase(it);
@@ -603,7 +718,7 @@ void GroupWindow::detachTab(QObject *object)
     }
     updateMinimumSize();
     if (tab->isDeleted()) {
-        return;
+        return false;
     }
     if (m_window && !m_window->isDeleted()) {
         KWin::workspace()->unconstrain(m_window, tab);
@@ -611,10 +726,12 @@ void GroupWindow::detachTab(QObject *object)
     if (auto *task = tab->windowManagementInterface()) {
         task->setParentWindow(nullptr);
     }
-    if (tab->noBorder()) {
-        tab->setDecorationPolicy(state.decoration);
+    if (state.originalDecoration && tab->noBorder()) {
+        tab->setDecorationPolicy(*state.originalDecoration);
     }
-    if (!state.skipTaskbar) {
+    if (state.originalSkipTaskbar.has_value()) {
+        tab->setOriginalSkipTaskbar(*state.originalSkipTaskbar);
+    } else if (!state.skipTaskbar) {
         tab->setSkipTaskbar(false);
     }
     if (!state.skipSwitcher) {
@@ -627,6 +744,7 @@ void GroupWindow::detachTab(QObject *object)
         tab->setMinimized(false);
     }
     tab->setHidden(false);
+    return tab == m_anchor && restoreAnchorMaximization();
 }
 
 void GroupWindow::updateMinimumSize()
@@ -710,5 +828,6 @@ void GroupWindow::dispose()
         m_window->setSkipTaskbar(true);
         m_window->setHidden(true);
     }
+    restoreAnchorMaximization();
     deleteLater();
 }

@@ -1,11 +1,15 @@
 #pragma once
 
+#include <core/rect.h>
+#include <effect/globals.h>
+
 #include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
+#include <optional>
 
 class QWindow;
 
@@ -37,7 +41,8 @@ public:
     Q_INVOKABLE void setTabBar(QObject *object);
     Q_INVOKABLE void setTabBarInteractive(bool interactive);
     Q_INVOKABLE bool attachTab(QObject *object);
-    Q_INVOKABLE void detachTab(QObject *object);
+    Q_INVOKABLE bool canKeepTab(QObject *object) const;
+    Q_INVOKABLE bool detachTab(QObject *object);
     Q_INVOKABLE void placeTab(QObject *object, bool active, bool visible);
     Q_INVOKABLE void focusTab(QObject *object, bool activate);
     Q_INVOKABLE void dispose();
@@ -50,7 +55,8 @@ private:
     class Surface;
     class SceneMember;
     struct Tab {
-        KWin::DecorationPolicy decoration;
+        std::optional<KWin::DecorationPolicy> originalDecoration;
+        std::optional<bool> originalSkipTaskbar;
         bool skipTaskbar;
         bool skipSwitcher;
         bool skipCloseAnimation;
@@ -60,9 +66,12 @@ private:
     };
 
     void adoptWindow(KWin::Window *window);
+    void finishMaximizedSetup();
+    bool restoreAnchorMaximization();
     void adoptTabBar();
     void selectTab(KWin::Window *tab);
     void updateScene();
+    bool ensureCaptureProtection();
     void protectCapture();
     void updateMinimumSize();
     void fail();
@@ -80,6 +89,10 @@ private:
     QMetaObject::Connection m_barClosed;
     QHash<KWin::Window *, Tab> m_tabs;
     int m_stripHeight;
+    KWin::MaximizeMode m_anchorMaximizeMode;
+    KWin::RectF m_anchorRestoreFrame;
+    bool m_anchorUnmaximized = false;
+    bool m_ready = false;
     bool m_barInteractive = false;
     bool m_captureProtected = false;
     bool m_failed = false;

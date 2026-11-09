@@ -31,12 +31,9 @@ function isApplicationWindow(window) {
     return window && !window.deleted && window.managed && window.normalWindow;
 }
 
-function fits(window, frame) {
+function fits(window, width, height) {
     const min = window.minSize;
-    const max = window.maxSize;
-    const { width, height } = frame;
-    return width >= Math.max(1, min.width) && height >= Math.max(1, min.height)
-        && (max.width <= 0 || width <= max.width) && (max.height <= 0 || height <= max.height);
+    return width >= Math.max(1, min.width) && height >= Math.max(1, min.height);
 }
 
 export function createController(workspace, ui) {
@@ -104,9 +101,10 @@ export function createController(workspace, ui) {
         const window = entry?.window;
         return isApplicationWindow(window) && window.output && window.wantsInput
             && window.moveable && window.resizeable && window.minimizable && window.closeable
-            && !window.transient && !window.modal && !window.fullScreen && !window.tile
+            && !window.transient && !window.modal && !window.fullScreen
             && !window.shade && (allowMaximized || !maximizeMode(window))
-            && (entry.attached ? window.noBorder : !window.skipTaskbar && ui.canHostTab(window, allowMaximized));
+            && (entry.attached ? !window.tile && entry.group.host.canKeepTab(window)
+                : !window.skipTaskbar && ui.canHostTab(window, allowMaximized));
     }
 
     function isOnWorkspace(window) {
@@ -117,16 +115,6 @@ export function createController(workspace, ui) {
 
     function isVisible(window) {
         return window && !window.deleted && !window.minimized && !window.hidden && isOnWorkspace(window);
-    }
-
-    function place(entry, frame) {
-        const window = entry.window;
-        const current = window.frameGeometry;
-        if (samePosition(current, frame) && Math.abs(current.width - frame.width) < 1
-            && Math.abs(current.height - frame.height) < 1) {
-            return;
-        }
-        window.frameGeometry = frame;
     }
 
     function fitFrame(window, frame) {
@@ -142,7 +130,7 @@ export function createController(workspace, ui) {
 
     function canPair(source, target) {
         if (!source || !target || source === target || source.group
-            || !canGroup(source) || !canGroup(target)
+            || !canGroup(source) || !canGroup(target, !target.group)
             || target.window.move || target.window.resize
             || !isVisible(source.window) || !isVisible(target.window)
             || scopeOf(source.window) !== scopeOf(target.window)) {
@@ -152,25 +140,56 @@ export function createController(workspace, ui) {
         if (group && (group.active !== target || !group.host.window || group.host.window.minimized)) {
             return false;
         }
-        return fits(source.window, target.window.clientGeometry);
+        const frame = (group?.host.window ?? target.window).clientGeometry;
+        const stripUsesExistingHeight = group || (maximizeMode(target.window) & 1);
+        return fits(source.window, frame.width, frame.height - (stripUsesExistingHeight ? ui.stripHeight() : 0));
+    }
+
+    function attachTab(group, entry) {
+        const window = entry.window;
+        if (window.move || window.resize) {
+            return false;
+        }
+        const tile = window.tile;
+        const frame = tile ? ui.restoredFrame(window) : null;
+        if (tile && !tile.unmanage?.(window)) {
+            return false;
+        }
+        if (window.tile || !group.host.attachTab(window)) {
+            if (!window.deleted && !window.tile) {
+                tile?.manage?.(window);
+            }
+            return false;
+        }
+        if (tile) {
+            entry.originalTile = tile;
+            entry.originalFrame = frame;
+        }
+        entry.attached = true;
+        return true;
     }
 
     function release(entry, keepPosition) {
-        const window = entry.window;
-        const group = entry.group;
+        const { window, group, attached } = entry;
         entry.group = null;
         entry.attached = false;
-        if (window && !window.deleted) {
-            group.host.detachTab(window);
-            if (!keepPosition && window.output && !window.fullScreen && !window.tile && !maximizeMode(window)) {
-                place(entry, fitFrame(window, entry.originalFrame));
-                if (entry.originalMaximize) {
+        if (attached && window && !window.deleted) {
+            const handledMaximization = group.host.detachTab(window);
+            const tile = entry.originalTile;
+            const restoreTile = tile?.manage && !tile.isLayout;
+            if (!handledMaximization && (!keepPosition || restoreTile) && window.output
+                && !window.fullScreen && !window.tile && !maximizeMode(window)) {
+                window.frameGeometry = fitFrame(window, entry.originalFrame);
+                if (restoreTile) {
+                    tile.manage(window);
+                } else if (entry.originalMaximize) {
                     window.setMaximize(!!(entry.originalMaximize & 1), !!(entry.originalMaximize & 2));
                 }
             }
         }
         entry.originalFrame = null;
         entry.originalMaximize = 0;
+        entry.originalTile = null;
     }
 
     function dissolve(group, keepPosition = null) {
@@ -196,23 +215,29 @@ export function createController(workspace, ui) {
 
     function reconcile() {
         for (const group of groups) {
-            const invalid = group.members.find(entry => !entry.window.move && !entry.window.resize && !canGroup(entry));
+            const window = group.host.window;
+            const invalid = group.members.find(entry => !entry.window.move && !entry.window.resize
+                && !canGroup(entry, !window && entry === group.pendingMaximizedAnchor));
             if (group.host.failed || invalid) {
                 dissolve(group, invalid);
                 continue;
             }
-            const window = group.host.window;
             if (!window) {
                 continue;
             }
-            const unattached = group.members.find(entry => {
-                entry.attached = entry.attached || group.host.attachTab(entry.window);
-                return !entry.attached;
-            });
+            if (group.pendingMaximizedAnchor) {
+                const frame = window.clientGeometry;
+                if (group.members.some(entry => !fits(entry.window, frame.width, frame.height - ui.stripHeight()))) {
+                    dissolve(group);
+                    continue;
+                }
+            }
+            const unattached = group.members.find(entry => !entry.attached && !attachTab(group, entry));
             if (unattached) {
                 dissolve(group, unattached);
                 continue;
             }
+            group.pendingMaximizedAnchor = null;
 
             const focused = focusOwner();
             const activeWindow = workspace.activeWindow;
@@ -244,7 +269,11 @@ export function createController(workspace, ui) {
             return;
         }
         let group = target.group;
-        if (!group) {
+        if (group) {
+            if (!attachTab(group, source)) {
+                return;
+            }
+        } else {
             const host = ui.createGroupWindow(target.window);
             if (!host) {
                 return;
@@ -257,7 +286,8 @@ export function createController(workspace, ui) {
             }
             host.setTabBar(bar);
             group = {
-                host, bar, members: [target], active: target, focusPending: false, lastFocus: null
+                host, bar, members: [target], active: target, focusPending: false, lastFocus: null,
+                pendingMaximizedAnchor: maximizeMode(target.window) ? target : null
             };
             group.close = () => {
                 if (group.host.window?.minimized) {
@@ -276,7 +306,7 @@ export function createController(workspace, ui) {
             target.group = group;
             target.originalFrame = frameOf(target.window);
         }
-        source.originalFrame = originalFrame;
+        source.originalFrame = source.originalFrame ?? originalFrame;
         source.originalMaximize = originalMaximize;
         source.group = group;
         group.members.push(source);
@@ -312,6 +342,9 @@ export function createController(workspace, ui) {
     }
 
     function dropTarget(source, point) {
+        if (source.window.tile) {
+            return null;
+        }
         for (const window of Array.from(workspace.windowAt(point, -1))) {
             if (entryFor(window) === source || ui.isOverlay(window)) {
                 continue;
@@ -335,6 +368,7 @@ export function createController(workspace, ui) {
         marked = null;
         drag = {
             source: entry, originalFrame: frameOf(entry.window), originalMaximize: maximizeMode(entry.window),
+            tileRestoreFrame: entry.window.tile ? ui.restoredFrame(entry.window) : null,
             hovered: null, since: 0
         };
         scheduleRefresh();
@@ -350,8 +384,10 @@ export function createController(workspace, ui) {
                 && contains(dropZone(target), point)) {
                 Qt.callLater(() => {
                     if (!stopped && !drag && windows.get(entry.id) === entry && windows.get(target.id) === target
-                        && !entry.window.move && !samePosition(entry.window.frameGeometry, moved.originalFrame)) {
-                        const originalFrame = moved.originalMaximize ? frameOf(entry.window) : moved.originalFrame;
+                        && !entry.window.move && !entry.window.tile
+                        && !samePosition(entry.window.frameGeometry, moved.originalFrame)) {
+                        const originalFrame = moved.tileRestoreFrame
+                            ?? (moved.originalMaximize ? frameOf(entry.window) : moved.originalFrame);
                         join(entry, target, originalFrame, moved.originalMaximize);
                     }
                 });
@@ -393,7 +429,10 @@ export function createController(workspace, ui) {
         const area = ui.workArea(window);
         const interactive = focused === group.active && isVisible(window) && !blocked && !covered(window, rect);
         if (!group.tabs) {
-            group.tabs = group.members.map(entry => ({ id: entry.id, caption: entry.window.caption, icon: entry.window.icon }));
+            group.tabs = group.members.map(entry => {
+                entry.icon = entry.icon ?? ui.tabIcon(entry.window);
+                return { id: entry.id, caption: entry.window.caption, icon: entry.icon };
+            });
         }
         group.bar.view = {
             rect, workArea: area, activeIndex: group.members.indexOf(group.active), tabs: group.tabs
@@ -433,7 +472,7 @@ export function createController(workspace, ui) {
         }
         const entry = {
             id: String(window.internalId), window, group: null, originalFrame: null, originalMaximize: 0,
-            attached: false, connections: []
+            originalTile: null, attached: false, icon: null, connections: []
         };
         windows.set(entry.id, entry);
         const listenTo = (signal, handler) => listen(signal, handler, entry.connections);
@@ -443,6 +482,10 @@ export function createController(workspace, ui) {
                 entry.group.tabs = null;
                 scheduleRefresh();
             }
+        };
+        const iconChanged = () => {
+            entry.icon = null;
+            tabChanged();
         };
         listenTo(window.interactiveMoveResizeStarted, () => startMove(entry));
         listenTo(window.interactiveMoveResizeFinished, () => endMove(entry));
@@ -454,10 +497,13 @@ export function createController(workspace, ui) {
             groupChanged();
         });
         listenTo(window.captionChanged, tabChanged);
-        listenTo(window.iconChanged, tabChanged);
+        listenTo(window.iconChanged, iconChanged);
+        listenTo(window.desktopFileNameChanged, iconChanged);
+        listenTo(window.windowClassChanged, iconChanged);
         for (const signal of [window.outputChanged, window.desktopsChanged, window.activitiesChanged,
-            window.fullScreenChanged, window.maximizedChanged, window.tileChanged, window.transientChanged,
-            window.modalChanged, window.skipTaskbarChanged, window.decorationPolicyChanged, window.closeableChanged]) {
+            window.fullScreenChanged, window.maximizedChanged, window.tileChanged, window.requestedTileChanged,
+            window.transientChanged, window.modalChanged, window.skipTaskbarChanged, window.decorationPolicyChanged,
+            window.decorationChanged, window.closeableChanged]) {
             listenTo(signal, groupChanged);
         }
         if (window.shadeChanged) {
