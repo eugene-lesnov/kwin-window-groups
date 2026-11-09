@@ -3,9 +3,11 @@
     "KPlugin": {
         "Id": "kwin-window-tabs",
         "Name": "Window Tabs",
+        "Name[ru]": "Вкладки окон",
         "Description": "Group application windows into tabs",
+        "Description[ru]": "Группировка окон приложений во вкладки",
         "Icon": "preferences-system-windows",
-        "Version": "0.1.0",
+        "Version": "0.1.1",
         "EnabledByDefault": false
     },
     "X-Plasma-API": "declarativescript",

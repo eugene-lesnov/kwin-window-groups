@@ -12,6 +12,7 @@ Window {
 
     required property var readCursorPosition
     required property int stripHeight
+    required property string translationDomain
     property var view: null
     property bool interactive: false
     property var insertion: null
@@ -179,7 +180,7 @@ Window {
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: tab.selected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                        Accessible.name: i18n("Close Window")
+                        Accessible.name: i18nd(bar.translationDomain, "Close Window")
 
                         Rectangle {
                             anchors.fill: closeButton
@@ -269,13 +270,13 @@ Window {
         closePolicy: Controls.Popup.CloseOnEscape
 
         Desktop.MenuItem {
-            text: i18n("Detach Window")
+            text: i18nd(bar.translationDomain, "Detach Window")
             icon.name: "tab-detach"
             onTriggered: bar.detached(tabMenu.tabId)
         }
 
         Desktop.MenuItem {
-            text: i18n("Ungroup Windows")
+            text: i18nd(bar.translationDomain, "Ungroup Windows")
             icon.name: "object-ungroup"
             onTriggered: bar.ungrouped()
         }

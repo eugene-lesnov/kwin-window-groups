@@ -1,0 +1,49 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kwin-window-tabs\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : "
+"n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
+msgid "Window Tabs: mark or group a window"
+msgstr "Вкладки окон: отметить окно или добавить его в группу"
+
+msgid "Window Tabs: previous tab"
+msgstr "Вкладки окон: предыдущая вкладка"
+
+msgid "Window Tabs: next tab"
+msgstr "Вкладки окон: следующая вкладка"
+
+msgid "Window Tabs: detach the current tab"
+msgstr "Вкладки окон: отделить текущую вкладку"
+
+msgid "Window Tabs: ungroup windows"
+msgstr "Вкладки окон: разгруппировать окна"
+
+msgid "Window Tabs"
+msgstr "Вкладки окон"
+
+#, qt-format
+msgid "Window Tabs — %1"
+msgstr "Вкладки окон — %1"
+
+msgid "Select another window and press the group shortcut again"
+msgstr "Выберите другое окно и снова нажмите клавиши группировки"
+
+msgid "Release to group windows"
+msgstr "Отпустите кнопку, чтобы сгруппировать окна"
+
+msgid "Drop here to group windows"
+msgstr "Перетащите окно сюда для группировки"
+
+msgid "Close Window"
+msgstr "Закрыть окно"
+
+msgid "Detach Window"
+msgstr "Отделить окно"
+
+msgid "Ungroup Windows"
+msgstr "Разгруппировать окна"

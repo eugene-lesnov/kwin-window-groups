@@ -6,6 +6,7 @@ import org.kde.kirigami as Kirigami
 Window {
     id: hint
 
+    required property string translationDomain
     property var view: null
     property bool suppressed: false
 
@@ -37,9 +38,10 @@ Window {
             color: hint.view?.armed ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
             text: {
                 if (hint.view?.marked) {
-                    return i18n("Select another window and press the group shortcut again");
+                    return i18nd(hint.translationDomain, "Select another window and press the group shortcut again");
                 }
-                return hint.view?.armed ? i18n("Release to group windows") : i18n("Drop here to group windows");
+                return hint.view?.armed ? i18nd(hint.translationDomain, "Release to group windows")
+                    : i18nd(hint.translationDomain, "Drop here to group windows");
             }
         }
     }

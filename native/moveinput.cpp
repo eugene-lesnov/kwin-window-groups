@@ -8,6 +8,8 @@
 #include <window.h>
 #include <workspace.h>
 
+#include <KLocalizedString>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QTimer>
@@ -79,6 +81,16 @@ MoveInput::MoveInput(QObject *parent)
 }
 
 MoveInput::~MoveInput() = default;
+
+QString MoveInput::registerTranslationCatalog(const QUrl &localeDirectory) const
+{
+    constexpr auto domain = "kwin-window-tabs";
+    const QString path = QFileInfo(localeDirectory.toLocalFile()).canonicalFilePath();
+    if (!path.isEmpty()) {
+        KLocalizedString::addDomainLocaleDir(domain, path);
+    }
+    return QString::fromLatin1(domain);
+}
 
 bool MoveInput::isMetaLeftPressFor(QObject *window) const
 {

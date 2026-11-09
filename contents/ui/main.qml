@@ -9,6 +9,7 @@ Item {
     property var controller: null
     property var tabs: null
     property var hint: null
+    readonly property string translationDomain: dragInput.translationDomain
     readonly property var workspace: KWinApi.Workspace
     readonly property int stripHeight: Math.round(Kirigami.Units.gridUnit * 1.6)
     readonly property var fullscreenEffects: ["overview", "windowview", "desktopgrid", "cube", "tileseditor"]
@@ -32,12 +33,18 @@ Item {
         return bar;
     }
 
-    Component { id: tabsComponent; TabBarWindow {} }
-    Component { id: hintComponent; DropHintWindow {} }
+    Component {
+        id: tabsComponent
+        TabBarWindow { translationDomain: root.translationDomain }
+    }
 
-    Loader {
+    Component {
+        id: hintComponent
+        DropHintWindow { translationDomain: root.translationDomain }
+    }
+
+    DragInput {
         id: dragInput
-        source: "DragInput.qml"
     }
 
     Timer {
@@ -54,35 +61,35 @@ Item {
 
     KWinApi.ShortcutHandler {
         name: "kwin-window-tabs-group"
-        text: i18n("Window Tabs: mark or group a window")
+        text: i18nd(root.translationDomain, "Window Tabs: mark or group a window")
         sequence: "Meta+G"
         onActivated: root.controller?.markOrJoin()
     }
 
     KWinApi.ShortcutHandler {
         name: "kwin-window-tabs-previous"
-        text: i18n("Window Tabs: previous tab")
+        text: i18nd(root.translationDomain, "Window Tabs: previous tab")
         sequence: "Meta+PageUp"
         onActivated: root.controller?.cycle(-1)
     }
 
     KWinApi.ShortcutHandler {
         name: "kwin-window-tabs-next"
-        text: i18n("Window Tabs: next tab")
+        text: i18nd(root.translationDomain, "Window Tabs: next tab")
         sequence: "Meta+PageDown"
         onActivated: root.controller?.cycle(1)
     }
 
     KWinApi.ShortcutHandler {
         name: "kwin-window-tabs-detach"
-        text: i18n("Window Tabs: detach the current tab")
+        text: i18nd(root.translationDomain, "Window Tabs: detach the current tab")
         sequence: "Meta+Shift+G"
         onActivated: root.controller?.detach()
     }
 
     KWinApi.ShortcutHandler {
         name: "kwin-window-tabs-ungroup"
-        text: i18n("Window Tabs: ungroup windows")
+        text: i18nd(root.translationDomain, "Window Tabs: ungroup windows")
         onActivated: root.controller?.ungroup()
     }
 
@@ -97,14 +104,14 @@ Item {
             stripHeight: () => root.stripHeight,
             isOverlay: window => window.caption === "org.kde.kwin-window-tabs.bar" || window.caption === "org.kde.kwin-window-tabs.menu"
                 || window.caption === hint.title,
-            isGroupWindow: window => dragInput.item?.isGroupWindow?.(window) === true,
-            canHostTab: (window, allowMaximized) => dragInput.item?.canHostTab?.(window, allowMaximized) === true,
-            createGroupWindow: window => dragInput.item?.createGroupWindow?.(window, root.stripHeight, i18n("Window Tabs")),
+            isGroupWindow: window => dragInput.isGroupWindow(window),
+            canHostTab: (window, allowMaximized) => dragInput.canHostTab(window, allowMaximized),
+            createGroupWindow: window => dragInput.createGroupWindow(window, root.stripHeight, i18nd(root.translationDomain, "Window Tabs")),
             createTabBar: () => root.createTabBar(),
-            groupTitle: caption => i18n("Window Tabs — %1", caption),
+            groupTitle: caption => i18nd(root.translationDomain, "Window Tabs — %1", caption),
             blocked: overlaysBlocked,
-            isMetaLeftPressFor: window => dragInput.item?.isMetaLeftPressFor(window) === true,
-            isLeftReleaseFor: window => dragInput.item?.isLeftReleaseFor(window) === true,
+            isMetaLeftPressFor: window => dragInput.isMetaLeftPressFor(window),
+            isLeftReleaseFor: window => dragInput.isLeftReleaseFor(window),
             waitForDrop: delay => {
                 dropTimer.interval = delay;
                 dropTimer.restart();

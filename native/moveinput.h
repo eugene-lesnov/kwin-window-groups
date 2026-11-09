@@ -3,6 +3,7 @@
 #include "groupwindow.h"
 
 #include <QObject>
+#include <QUrl>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
 
@@ -15,6 +16,7 @@ public:
     explicit MoveInput(QObject *parent = nullptr);
     ~MoveInput() override;
 
+    Q_INVOKABLE QString registerTranslationCatalog(const QUrl &localeDirectory) const;
     Q_INVOKABLE bool isMetaLeftPressFor(QObject *window) const;
     Q_INVOKABLE bool isLeftReleaseFor(QObject *window) const;
     Q_INVOKABLE bool canHostTab(QObject *window, bool allowMaximized) const;
