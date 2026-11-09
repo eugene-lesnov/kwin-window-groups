@@ -76,20 +76,6 @@ Item {
     }
 
     KWinApi.ShortcutHandler {
-        name: "kwin-window-tabs-previous"
-        text: i18nd(root.translationDomain, "Window Groups: previous tab")
-        sequence: "Meta+PageUp"
-        onActivated: root.controller?.cycle(-1)
-    }
-
-    KWinApi.ShortcutHandler {
-        name: "kwin-window-tabs-next"
-        text: i18nd(root.translationDomain, "Window Groups: next tab")
-        sequence: "Meta+PageDown"
-        onActivated: root.controller?.cycle(1)
-    }
-
-    KWinApi.ShortcutHandler {
         name: "kwin-window-tabs-detach"
         text: i18nd(root.translationDomain, "Window Groups: detach the current tab")
         sequence: "Meta+Shift+G"

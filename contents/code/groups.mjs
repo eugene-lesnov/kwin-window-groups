@@ -634,14 +634,6 @@ export function createController(workspace, ui) {
                 refresh();
             }
         },
-        cycle(delta) {
-            const group = focusedEntry()?.group;
-            if (group) {
-                const index = group.members.indexOf(group.active);
-                const count = group.members.length;
-                requestSelection(group.members[(index + delta + count) % count]);
-            }
-        },
         detach(id) {
             const focused = focusedEntry();
             const entry = id === undefined ? focused : windows.get(id);

@@ -11,12 +11,6 @@ msgstr ""
 msgid "Window Groups: mark or group a window"
 msgstr "Группы окон: отметить окно или добавить его в группу"
 
-msgid "Window Groups: previous tab"
-msgstr "Группы окон: предыдущая вкладка"
-
-msgid "Window Groups: next tab"
-msgstr "Группы окон: следующая вкладка"
-
 msgid "Window Groups: detach the current tab"
 msgstr "Группы окон: отделить текущую вкладку"
 
