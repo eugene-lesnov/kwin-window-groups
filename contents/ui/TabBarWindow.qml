@@ -135,12 +135,18 @@ Window {
                 height: bar.stripHeight
                 radius: Kirigami.Units.smallSpacing
                 color: selected ? Kirigami.Theme.highlightColor
-                    : mouse.containsMouse ? Qt.alpha(Kirigami.Theme.highlightColor, 0.18) : "transparent"
+                    : tabHover.hovered && !closeButton.hovered
+                        ? Qt.alpha(Kirigami.Theme.highlightColor, 0.18) : "transparent"
 
                 Accessible.role: Accessible.PageTab
                 Accessible.name: modelData.caption
                 Accessible.selected: selected
                 Accessible.onPressAction: bar.selected(modelData.id)
+
+                HoverHandler {
+                    id: tabHover
+                    enabled: bar.interactive && closeButton.hoverEnabled
+                }
 
                 RowLayout {
                     z: 1
@@ -191,14 +197,11 @@ Window {
                 }
 
                 MouseArea {
-                    id: mouse
-
                     property point pressPosition
                     property bool dragging: false
 
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    hoverEnabled: true
                     preventStealing: true
 
                     onPressed: event => {
