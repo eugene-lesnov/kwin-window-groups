@@ -42,6 +42,7 @@ public:
     Q_INVOKABLE void setTabBarInteractive(bool interactive);
     Q_INVOKABLE bool attachTab(QObject *object);
     Q_INVOKABLE bool canKeepTab(QObject *object) const;
+    Q_INVOKABLE bool deferAnchorRelease(QObject *object, bool activate);
     Q_INVOKABLE bool detachTab(QObject *object);
     Q_INVOKABLE void placeTab(QObject *object, bool active, bool visible);
     Q_INVOKABLE void focusTab(QObject *object, bool activate);
@@ -63,11 +64,14 @@ private:
         bool minimizedByGroup;
         QMetaObject::Connection closed;
         QMetaObject::Connection captureChanged;
+        bool offscreenRendering = false;
     };
 
     void adoptWindow(KWin::Window *window);
     void finishMaximizedSetup();
+    bool canRestoreAnchorMaximization() const;
     bool restoreAnchorMaximization();
+    static void restoreTabDecoration(KWin::Window *tab, std::optional<KWin::DecorationPolicy> policy);
     void adoptTabBar();
     void selectTab(KWin::Window *tab);
     void updateScene();

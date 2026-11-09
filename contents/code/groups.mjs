@@ -169,11 +169,11 @@ export function createController(workspace, ui) {
         return true;
     }
 
-    function release(entry, keepPosition) {
+    function release(entry, keepPosition, deferred = false) {
         const { window, group, attached } = entry;
         entry.group = null;
         entry.attached = false;
-        if (attached && window && !window.deleted) {
+        if (!deferred && attached && window && !window.deleted) {
             const handledMaximization = group.host.detachTab(window);
             const tile = entry.originalTile;
             const restoreTile = tile?.manage && !tile.isLayout;
@@ -192,16 +192,21 @@ export function createController(workspace, ui) {
         entry.originalTile = null;
     }
 
-    function dissolve(group, keepPosition = null) {
+    function dissolve(group, keepPosition = null, activateAfterClose = null) {
         groups.delete(group);
         group.host.changed.disconnect(scheduleRefresh);
         group.host.closeRequested.disconnect(group.close);
         group.bar.view = null;
         group.bar.destroy();
+        const deferred = activateAfterClose !== null && keepPosition?.attached === true
+            && group.host.deferAnchorRelease?.(keepPosition.window, activateAfterClose) === true;
         for (const entry of group.members) {
-            release(entry, entry === keepPosition);
+            release(entry, entry === keepPosition, deferred && entry === keepPosition);
         }
-        group.host.dispose();
+        if (!deferred) {
+            group.host.dispose();
+        }
+        return deferred;
     }
 
     function requestSelection(entry) {
@@ -334,8 +339,8 @@ export function createController(workspace, ui) {
             group.focusPending = shouldFocus;
         }
         if (group.members.length <= 1) {
-            dissolve(group, group.active);
-            if (shouldFocus && group.active && isVisible(group.active.window)) {
+            const deferred = dissolve(group, group.active, closing ? shouldFocus : null);
+            if (!deferred && shouldFocus && group.active && isVisible(group.active.window)) {
                 workspace.activeWindow = group.active.window;
             }
         }

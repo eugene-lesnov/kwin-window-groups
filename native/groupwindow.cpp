@@ -512,15 +512,22 @@ void GroupWindow::finishMaximizedSetup()
     }
 }
 
+bool GroupWindow::canRestoreAnchorMaximization() const
+{
+    return m_anchorUnmaximized && m_anchor && !m_anchor->isDeleted() && m_anchor->output()
+        && m_anchor->requestedMaximizeMode() == KWin::MaximizeRestore && !m_anchor->isRequestedFullScreen()
+        && !m_anchor->requestedTile() && !m_anchor->isInteractiveMove() && !m_anchor->isInteractiveResize();
+}
+
 bool GroupWindow::restoreAnchorMaximization()
 {
+    const bool restore = canRestoreAnchorMaximization();
     auto *anchor = m_anchor.data();
     m_anchor.clear();
     if (!m_anchorUnmaximized || !anchor || anchor->isDeleted()) {
         return false;
     }
-    if (anchor->output() && anchor->requestedMaximizeMode() == KWin::MaximizeRestore && !anchor->isRequestedFullScreen()
-        && !anchor->requestedTile() && !anchor->isInteractiveMove() && !anchor->isInteractiveResize()) {
+    if (restore) {
         auto frame = m_anchorRestoreFrame;
         if (frame.isValid()) {
             const auto area = KWin::workspace()->clientArea(KWin::MaximizeArea, anchor);
@@ -679,7 +686,9 @@ bool GroupWindow::attachTab(QObject *object)
             if (m_activeTab == tab) {
                 selectTab(nullptr);
             }
-            m_tabs.remove(tab);
+            if (m_tabs.take(tab).offscreenRendering) {
+                tab->unrefOffscreenRendering();
+            }
             updateMinimumSize();
         }), connect(tab, &KWin::Window::excludeFromCaptureChanged, this, protectTab)});
     tab->setSkipTaskbar(true);
@@ -702,6 +711,73 @@ bool GroupWindow::canKeepTab(QObject *object) const
     return m_tabs.contains(tab) && !tab->nextDecoration();
 }
 
+bool GroupWindow::deferAnchorRelease(QObject *object, bool activate)
+{
+    auto *tab = qobject_cast<KWin::Window *>(object);
+    const auto it = m_tabs.find(tab);
+    if (m_disposed || m_failed || it == m_tabs.end() || tab != m_anchor || !canRestoreAnchorMaximization()
+        || !m_window || !m_window->isShown() || !m_window->isOnCurrentDesktop() || !m_window->isOnCurrentActivity()) {
+        return false;
+    }
+
+    const auto decoration = it->originalDecoration;
+    it->originalDecoration.reset();
+    it->offscreenRendering = true;
+    tab->refOffscreenRendering();
+
+    auto *workspace = KWin::workspace();
+    const bool transferFocus = activate || workspace->activeWindow() == tab;
+    if (transferFocus && !KWin::waylandServer()->isScreenLocked()) {
+        workspace->activateWindow(m_window, true);
+    }
+    setTabBar(nullptr);
+    selectTab(nullptr);
+    tab->setHidden(true);
+    restoreTabDecoration(tab, decoration);
+    restoreAnchorMaximization();
+
+    const QPointer<KWin::Window> survivor(tab);
+    const auto finish = [this, survivor, workspace] {
+        if (m_disposed) {
+            return;
+        }
+        KWin::StackingUpdatesBlocker blocker(workspace);
+        const bool hostFocused = m_window && workspace->activeWindow() == m_window;
+        if (survivor && !survivor->isDeleted()) {
+            detachTab(survivor);
+            if (hostFocused && survivor->isShown() && survivor->isOnCurrentDesktop() && survivor->isOnCurrentActivity()
+                && !KWin::waylandServer()->isScreenLocked()) {
+                workspace->activateWindow(survivor, true);
+            }
+        }
+        dispose();
+    };
+    const auto check = [this, survivor, finish] {
+        if (m_failed || !m_window || !m_window->isShown() || !survivor || survivor->isDeleted()
+            || survivor->requestedMaximizeMode() != m_anchorMaximizeMode || survivor->maximizeMode() == m_anchorMaximizeMode) {
+            finish();
+        }
+    };
+    connect(tab, &KWin::Window::maximizedChanged, this, check, Qt::QueuedConnection);
+    connect(tab, &KWin::Window::closed, this, finish, Qt::QueuedConnection);
+    connect(this, &GroupWindow::closeRequested, this, [survivor] {
+        if (survivor && !survivor->isDeleted() && survivor->isCloseable()) {
+            survivor->closeWindow();
+        }
+    });
+    connect(this, &GroupWindow::changed, this, check, Qt::QueuedConnection);
+    QTimer::singleShot(0, this, check);
+    QTimer::singleShot(500, this, finish);
+    return true;
+}
+
+void GroupWindow::restoreTabDecoration(KWin::Window *tab, std::optional<KWin::DecorationPolicy> policy)
+{
+    if (policy && tab->noBorder()) {
+        tab->setDecorationPolicy(*policy);
+    }
+}
+
 bool GroupWindow::detachTab(QObject *object)
 {
     auto *tab = qobject_cast<KWin::Window *>(object);
@@ -717,6 +793,9 @@ bool GroupWindow::detachTab(QObject *object)
         selectTab(nullptr);
     }
     updateMinimumSize();
+    if (state.offscreenRendering) {
+        tab->unrefOffscreenRendering();
+    }
     if (tab->isDeleted()) {
         return false;
     }
@@ -726,9 +805,7 @@ bool GroupWindow::detachTab(QObject *object)
     if (auto *task = tab->windowManagementInterface()) {
         task->setParentWindow(nullptr);
     }
-    if (state.originalDecoration && tab->noBorder()) {
-        tab->setDecorationPolicy(*state.originalDecoration);
-    }
+    restoreTabDecoration(tab, state.originalDecoration);
     if (state.originalSkipTaskbar.has_value()) {
         tab->setOriginalSkipTaskbar(*state.originalSkipTaskbar);
     } else if (!state.skipTaskbar) {
