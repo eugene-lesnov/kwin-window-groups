@@ -1,0 +1,13 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Id": "kwin-window-tabs",
+        "Name": "Window Tabs",
+        "Description": "Group application windows into tabs",
+        "Icon": "preferences-system-windows",
+        "Version": "0.1.0",
+        "EnabledByDefault": false
+    },
+    "X-Plasma-API": "declarativescript",
+    "X-Plasma-MainScript": "ui/main.qml"
+}
