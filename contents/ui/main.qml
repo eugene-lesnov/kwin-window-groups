@@ -21,9 +21,10 @@ Item {
         const bar = tabsComponent.createObject(null, {
             readCursorPosition: () => root.workspace.cursorPos,
             stripHeight: root.stripHeight
-        });
+        }) as TabBarWindow;
         if (bar) {
             bar.selected.connect(id => controller.select(id));
+            bar.reordered.connect((id, targetId, after) => controller.reorder(id, targetId, after));
             bar.detached.connect(id => controller.detach(id));
             bar.ungrouped.connect(() => controller.ungroup());
         }

@@ -538,6 +538,25 @@ export function createController(workspace, ui) {
                 requestSelection(entry);
             }
         },
+        reorder(id, targetId, after) {
+            const group = focusedEntry()?.group;
+            const entry = windows.get(id);
+            const target = windows.get(targetId);
+            if (stopped || !group || entry?.group !== group || target?.group !== group || entry === target
+                || !group.bar.interactive || ui.blocked()) {
+                return;
+            }
+
+            const sourceIndex = group.members.indexOf(entry);
+            const boundary = group.members.indexOf(target) + Number(after);
+            const destination = boundary - Number(sourceIndex < boundary);
+            if (sourceIndex !== destination) {
+                group.members.splice(sourceIndex, 1);
+                group.members.splice(destination, 0, entry);
+                group.tabs = null;
+                refresh();
+            }
+        },
         cycle(delta) {
             const group = focusedEntry()?.group;
             if (group) {

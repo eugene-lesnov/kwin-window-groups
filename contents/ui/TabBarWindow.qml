@@ -14,10 +14,12 @@ Window {
     required property int stripHeight
     property var view: null
     property bool interactive: false
+    property var insertion: null
     readonly property string menuTitle: "org.kde.kwin-window-tabs.menu"
     readonly property int activeIndex: view ? view.activeIndex : -1
 
     signal selected(string id)
+    signal reordered(string id, string targetId, bool after)
     signal detached(string id)
     signal ungrouped()
 
@@ -34,6 +36,32 @@ Window {
         if (activeIndex >= 0 && activeIndex < tabList.count) {
             tabList.positionViewAtIndex(activeIndex, ListView.Contain);
         }
+    }
+
+    function insertionAt(source, point) {
+        if (!interactive || !tabList.contains(point)) {
+            return null;
+        }
+
+        const contentPoint = tabList.mapToItem(tabList.contentItem, point);
+        const targetIndex = tabList.indexAt(contentPoint.x, contentPoint.y);
+        const target = tabList.itemAtIndex(targetIndex);
+        if (!target) {
+            return null;
+        }
+
+        const rightHalf = contentPoint.x >= target.x + target.width / 2;
+        const after = rightHalf !== (tabList.effectiveLayoutDirection === Qt.RightToLeft);
+        const boundary = targetIndex + Number(after);
+        if (boundary === source.index || boundary === source.index + 1) {
+            return null;
+        }
+
+        return {
+            targetId: view.tabs[targetIndex].id,
+            after,
+            x: target.x - tabList.contentX + (rightHalf ? target.width : 0)
+        };
     }
 
     function openTabMenu(tabId, position) {
@@ -58,7 +86,12 @@ Window {
 
     onActiveIndexChanged: Qt.callLater(revealActiveTab)
     onVisibleChanged: if (!visible) tabMenu.close()
-    onInteractiveChanged: if (!interactive) tabMenu.close()
+    onInteractiveChanged: {
+        if (!interactive) {
+            insertion = null;
+            tabMenu.close();
+        }
+    }
     onViewChanged: {
         if (tabMenu.visible && !view?.tabs.some(tab => tab.id === tabMenu.tabId)) {
             tabMenu.close();
@@ -83,6 +116,8 @@ Window {
             boundsBehavior: Flickable.StopAtBounds
             model: bar.view ? bar.view.tabs : []
             onCountChanged: Qt.callLater(bar.revealActiveTab)
+            onModelChanged: bar.insertion = null
+            onContentXChanged: bar.insertion = null
 
             Controls.ScrollBar.horizontal: Controls.ScrollBar {
                 policy: Controls.ScrollBar.AsNeeded
@@ -128,21 +163,67 @@ Window {
 
                 MouseArea {
                     id: mouse
+
+                    property point pressPosition
+                    property bool dragging: false
+
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     hoverEnabled: true
+                    preventStealing: true
+
+                    onPressed: event => {
+                        if (event.button === Qt.LeftButton) {
+                            pressPosition = mapToItem(tabList, event.x, event.y);
+                            dragging = false;
+                        }
+                    }
+
+                    onPositionChanged: event => {
+                        if (!(pressedButtons & Qt.LeftButton) || !bar.interactive) {
+                            return;
+                        }
+                        const point = mapToItem(tabList, event.x, event.y);
+                        if (!dragging && Math.hypot(point.x - pressPosition.x, point.y - pressPosition.y) < drag.threshold) {
+                            return;
+                        }
+                        dragging = true;
+                        bar.insertion = bar.insertionAt(tab, point);
+                    }
+
+                    onReleased: event => {
+                        if (event.button === Qt.LeftButton && dragging) {
+                            const drop = bar.insertionAt(tab, mapToItem(tabList, event.x, event.y));
+                            bar.insertion = null;
+                            if (drop) {
+                                Qt.callLater(bar.reordered, tab.modelData.id, drop.targetId, drop.after);
+                            }
+                        }
+                    }
+
+                    onCanceled: bar.insertion = null
 
                     onClicked: event => {
                         if (event.button === Qt.RightButton) {
                             const position = bar.readCursorPosition();
                             Qt.callLater(bar.openTabMenu, tab.modelData.id, position);
-                        } else {
+                        } else if (!dragging) {
                             tabMenu.close();
                             bar.selected(tab.modelData.id);
                         }
                     }
                 }
             }
+        }
+
+        Rectangle {
+            visible: bar.insertion !== null
+            width: Kirigami.Units.smallSpacing
+            height: parent.height - 2 * Kirigami.Units.smallSpacing
+            x: bar.insertion ? Math.max(0, Math.min(parent.width - width, bar.insertion.x - width / 2)) : 0
+            anchors.verticalCenter: parent.verticalCenter
+            radius: width / 2
+            color: Kirigami.Theme.textColor
         }
     }
 
